@@ -253,6 +253,31 @@ func SetApiRouter(router *gin.Engine) {
 			}
 		}
 
+		// 用量统计（按日）——移植自 MIXAPI
+		usageStatsRoute := apiRouter.Group("/usage_statistics")
+		{
+			usageStatsRoute.GET("/", middleware.AdminAuth(), controller.GetUsageStatistics)
+			usageStatsRoute.GET("/summary", middleware.AdminAuth(), controller.GetUsageStatisticsSummary)
+			usageStatsRoute.GET("/self", middleware.UserAuth(), controller.GetUserUsageStatistics)
+		}
+
+		// 月度用量统计——移植自 MIXAPI
+		monthlyUsageStatsRoute := apiRouter.Group("/usage_statistics_monthly")
+		{
+			monthlyUsageStatsRoute.GET("/", middleware.AdminAuth(), controller.GetMonthlyUsageStatistics)
+			monthlyUsageStatsRoute.GET("/summary", middleware.AdminAuth(), controller.GetMonthlyUsageStatisticsSummary)
+			monthlyUsageStatsRoute.GET("/self", middleware.UserAuth(), controller.GetUserMonthlyUsageStatistics)
+		}
+
+		// 用量排序统计——移植自 MIXAPI（MySQL 专用，见 model/usage_statistics_rank.go）
+		usageStatsRankRoute := apiRouter.Group("/usage_statistics_rank")
+		{
+			usageStatsRankRoute.GET("/", middleware.AdminAuth(), controller.GetRankUsageStatistics)
+			usageStatsRankRoute.GET("/self", middleware.UserAuth(), controller.GetUserRankUsageStatistics)
+			usageStatsRankRoute.GET("/export", middleware.AdminAuth(), controller.ExportRankUsageStatistics)
+			usageStatsRankRoute.GET("/self/export", middleware.UserAuth(), controller.ExportRankUsageStatistics)
+		}
+
 		redemptionRoute := apiRouter.Group("/redemption")
 		redemptionRoute.Use(middleware.AdminAuth())
 		{
