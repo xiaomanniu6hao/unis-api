@@ -6,6 +6,10 @@ upload
 *.exe
 *.db
 build
+
+# === unis-api 定制化工具包：脚本与文档随仓库提交，可再生产物排除 ===
+.custom/patches/
+.custom/ported/
 *.db-journal
 logs
 web/default/dist
