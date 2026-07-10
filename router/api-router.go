@@ -278,6 +278,33 @@ func SetApiRouter(router *gin.Engine) {
 			usageStatsRankRoute.GET("/self/export", middleware.UserAuth(), controller.ExportRankUsageStatistics)
 		}
 
+		// 输入 tokens 分布统计——移植自 MIXAPI（MySQL 专用，见 model/token_distribution.go）
+		promptTokensDistRoute := apiRouter.Group("/prompt_tokens_distribution")
+		{
+			promptTokensDistRoute.GET("/", middleware.AdminAuth(), controller.GetPromptTokensDistribution)
+			promptTokensDistRoute.GET("/self", middleware.UserAuth(), controller.GetUserPromptTokensDistribution)
+			promptTokensDistRoute.GET("/export", middleware.AdminAuth(), controller.ExportPromptTokensDistribution)
+			promptTokensDistRoute.GET("/self/export", middleware.UserAuth(), controller.ExportPromptTokensDistribution)
+		}
+
+		// 输出 tokens 分布统计——移植自 MIXAPI（MySQL 专用）
+		completionTokensDistRoute := apiRouter.Group("/completion_tokens_distribution")
+		{
+			completionTokensDistRoute.GET("/", middleware.AdminAuth(), controller.GetCompletionTokensDistribution)
+			completionTokensDistRoute.GET("/self", middleware.UserAuth(), controller.GetUserCompletionTokensDistribution)
+			completionTokensDistRoute.GET("/export", middleware.AdminAuth(), controller.ExportCompletionTokensDistribution)
+			completionTokensDistRoute.GET("/self/export", middleware.UserAuth(), controller.ExportCompletionTokensDistribution)
+		}
+
+		// 单问题请求次数分布统计——移植自 MIXAPI（MySQL 专用，依赖 logs.user_input）
+		requestCountDistRoute := apiRouter.Group("/request_count_distribution")
+		{
+			requestCountDistRoute.GET("/", middleware.AdminAuth(), controller.GetRequestCountDistribution)
+			requestCountDistRoute.GET("/self", middleware.UserAuth(), controller.GetUserRequestCountDistribution)
+			requestCountDistRoute.GET("/export", middleware.AdminAuth(), controller.ExportRequestCountDistribution)
+			requestCountDistRoute.GET("/self/export", middleware.UserAuth(), controller.ExportRequestCountDistribution)
+		}
+
 		redemptionRoute := apiRouter.Group("/redemption")
 		redemptionRoute.Use(middleware.AdminAuth())
 		{
