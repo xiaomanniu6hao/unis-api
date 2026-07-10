@@ -57,6 +57,7 @@ const headerNavSchema = z.object({
   rankingsRequireAuth: z.boolean(),
   docs: z.boolean(),
   about: z.boolean(),
+  info: z.boolean(),
 })
 
 type HeaderNavFormValues = z.infer<typeof headerNavSchema>
@@ -95,6 +96,10 @@ const toFormValues = (config: HeaderNavModulesConfig): HeaderNavFormValues => ({
     config.about === undefined
       ? HEADER_NAV_DEFAULT.about
       : Boolean(config.about),
+  info:
+    config.info === undefined
+      ? HEADER_NAV_DEFAULT.info
+      : Boolean(config.info),
 })
 
 export function HeaderNavigationSection({
@@ -121,6 +126,7 @@ export function HeaderNavigationSection({
       console: values.console,
       docs: values.docs,
       about: values.about,
+      info: values.info,
       pricing: {
         ...(config.pricing ?? HEADER_NAV_DEFAULT.pricing),
         enabled: values.pricingEnabled,
@@ -172,6 +178,11 @@ export function HeaderNavigationSection({
       key: 'about',
       title: t('About'),
       description: t('Static page describing the platform.'),
+    },
+    {
+      key: 'info',
+      title: t('API Info'),
+      description: t('Public page listing API tokens and system notice.'),
     },
   ]
 

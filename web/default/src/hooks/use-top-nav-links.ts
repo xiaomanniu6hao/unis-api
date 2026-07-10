@@ -100,5 +100,10 @@ export function useTopNavLinks(): TopNavLink[] {
     links.push({ title: t('About'), href: '/about' })
   }
 
+  // Info (API tokens + notice, MIXAPI port)
+  if (modules?.info !== false) {
+    links.push({ title: t('API Info'), href: '/info' })
+  }
+
   return links
 }

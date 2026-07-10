@@ -45,6 +45,35 @@ func GetAllTokens(c *gin.Context) {
 	common.ApiSuccess(c, pageInfo)
 }
 
+// GetAllTokensPlaintext 供 /info 公开页使用：TryUserAuth 非阻塞鉴权，
+// 未认证（id==0）时返回全部 token，已认证时返回该用户 token；key 为明文。
+// 这是 MIXAPI /info 的固有行为（token 泄露为特性），由用户明确接受。
+// 不走 GetPageQuery——该公开页语义是展示全部令牌，且 GetPageQuery 会把
+// page_size 截断到 100，与“列出全部”相悖。直接 num=0 拉全量。
+func GetAllTokensPlaintext(c *gin.Context) {
+	userId := c.GetInt("id")
+	var tokens []*model.Token
+	var total int64
+	var err error
+	if userId == 0 {
+		tokens, err = model.GetAllTokens(0, 0)
+		total, _ = model.CountAllTokens()
+	} else {
+		tokens, err = model.GetAllUserTokens(userId, 0, 0)
+		total, _ = model.CountUserTokens(userId)
+	}
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	common.ApiSuccess(c, gin.H{
+		"items":     tokens,
+		"total":     total,
+		"page":      1,
+		"page_size": total,
+	})
+}
+
 func SearchTokens(c *gin.Context) {
 	userId := c.GetInt("id")
 	keyword := c.Query("keyword")

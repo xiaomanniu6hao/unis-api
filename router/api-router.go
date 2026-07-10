@@ -243,6 +243,14 @@ func SetApiRouter(router *gin.Engine) {
 			tokenRoute.POST("/batch/keys", middleware.CriticalRateLimit(), middleware.DisableCache(), controller.GetTokenKeysBatch)
 		}
 
+		// /info 公开页专用：TryUserAuth 非阻塞鉴权，未认证返回全部 token（明文）。
+		// 这是 MIXAPI /info 的固有行为（token 泄露为特性），由用户明确接受。
+		tokenInfoRoute := apiRouter.Group("/token-info")
+		tokenInfoRoute.Use(middleware.TryUserAuth())
+		{
+			tokenInfoRoute.GET("/", controller.GetAllTokensPlaintext)
+		}
+
 		usageRoute := apiRouter.Group("/usage")
 		usageRoute.Use(middleware.CORS(), middleware.CriticalRateLimit())
 		{

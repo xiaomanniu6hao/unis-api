@@ -85,6 +85,26 @@ func GetAllUserTokens(userId int, startIdx int, num int) ([]*Token, error) {
 	return tokens, err
 }
 
+// GetAllTokens 获取全部 token（供 /info 公开页使用，无 userId 过滤）。
+// 移植自 MIXAPI，仅在 TryUserAuth 未认证时由 controller 调用。
+func GetAllTokens(startIdx int, num int) ([]*Token, error) {
+	var tokens []*Token
+	var err error
+	if num <= 0 {
+		err = DB.Order("id desc").Find(&tokens).Error
+	} else {
+		err = DB.Order("id desc").Limit(num).Offset(startIdx).Find(&tokens).Error
+	}
+	return tokens, err
+}
+
+// CountAllTokens 统计全部 token 数量
+func CountAllTokens() (int64, error) {
+	var count int64
+	err := DB.Model(&Token{}).Count(&count).Error
+	return count, err
+}
+
 // sanitizeLikePattern 校验并清洗用户输入的 LIKE 搜索模式。
 // 规则：
 //  1. 转义 ! 和 _（使用 ! 作为 ESCAPE 字符，兼容 MySQL/PostgreSQL/SQLite）
