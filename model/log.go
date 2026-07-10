@@ -401,6 +401,10 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 			NodeName:  common.NodeName,
 		})
 	}
+	if recordErr := RecordUsageStatistics(params.TokenId, params.TokenName, params.ModelName,
+		params.PromptTokens, params.CompletionTokens, 0, params.Quota, true); recordErr != nil {
+		common.SysError("failed to record usage statistics: " + recordErr.Error())
+	}
 }
 
 type RecordTaskBillingLogParams struct {
@@ -462,6 +466,13 @@ func RecordTaskBillingLog(params RecordTaskBillingLogParams) {
 			ChannelID: params.ChannelId,
 			NodeName:  nodeName,
 		})
+	}
+	if params.LogType == LogTypeConsume || params.LogType == LogTypeError || params.LogType == LogTypeRefund {
+		isSuccess := params.LogType == LogTypeConsume
+		if recordErr := RecordUsageStatistics(params.TokenId, tokenName, params.ModelName,
+			0, 0, 0, params.Quota, isSuccess); recordErr != nil {
+			common.SysError("failed to record usage statistics for task: " + recordErr.Error())
+		}
 	}
 }
 
