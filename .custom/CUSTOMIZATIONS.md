@@ -55,6 +55,59 @@
 
 ---
 
+## 初始移植（移植自 MIXAPI / new-api-dev，2026-07-10）
+
+以下 6 个功能从 `new-api-dev` 工作区移植，按功能边界拆成 6 个 commit。
+**注意**：i18n 的 34 个新 key 为一整块尾部追加，为减少升级冲突点，
+统一并入 [5] 提交（而非参考实现的 [5]+[6] 各分一半）。[6] 因此不含 i18n 改动。
+
+### [1] usage_statistics 汇总表 + rollup 写入
+- **Commit**: 0001
+- **新增**: `model/usage_statistics.go`
+- **核心文件**: `model/main.go` AutoMigrate(+1)，`model/log.go` RecordConsumeLog/RecordTaskBillingLog 调 rollup
+- **数据库**: 新增 `usage_statistics` 表（三库兼容 Upsert）
+- **回滚**: 删新增文件 + 撤 main.go/log.go 对应行
+
+### [2] Claude 用户输入提取 + Log.UserInput 列 + 开关
+- **Commit**: 0002
+- **新增**: `model/user_input_extract.go`
+- **核心文件**: `model/log.go`(Log.UserInput 列+提取), `common/constants.go`(LogUserInputEnabled), `model/option.go`(option 注册), `relay/claude_handler.go` + `relay/channel/claude/relay-claude.go`(注入 claude_request)
+- **数据库**: `logs` 表新增 `user_input` 列
+- **依赖**: 无
+- **回滚**: 删新增文件 + 撤核心文件对应行
+
+### [3] 用量统计 API（日/月/rank + summary + 导出）+ 路由
+- **Commit**: 0003
+- **新增**: `controller/usage_statistics.go`, `model/usage_statistics_rank.go`
+- **核心文件**: `router/api-router.go` — usage_statistics / _monthly / _rank 路由组
+- **注意**: rank 查询 MySQL 专用，SQLite/PostgreSQL 下报错（已接受）
+- **回滚**: 删新增文件 + 撤路由组
+
+### [4] token 分布统计 API（prompt/completion/request_count）+ 路由
+- **Commit**: 0004
+- **新增**: `controller/token_distribution.go`, `model/token_distribution.go`
+- **核心文件**: `router/api-router.go` — 3 个 distribution 路由组
+- **依赖**: 功能 [2] 的 `logs.user_input` 列
+- **注意**: 分布查询 MySQL 专用（已接受）
+- **回滚**: 删新增文件 + 撤路由组
+
+### [5] /info 公开页 + token-info 明文端点 + 导航注册 + i18n
+- **Commit**: 0005
+- **新增**: `web/default/src/features/info/{api.ts,index.tsx}`, `web/default/src/routes/info/index.tsx`
+- **核心文件**: `controller/token.go`(GetAllTokensPlaintext), `model/token.go`(GetAllTokens/CountAllTokens), `router/api-router.go`(token-info 组), `nav-modules.ts`+`use-top-nav-links.ts`+maintenance `config.ts`/`header-navigation-section.tsx`(导航开关), `i18n/locales/{en,zh}.json`(34 key)
+- **注意**: token 明文泄露为 /info 固有特性，由用户明确接受
+- **回滚**: 删新增文件 + 撤核心文件对应行
+
+### [6] 6 个统计页前端（日/月/rank + 3 分布）+ 侧边栏分区
+- **Commit**: 0006
+- **新增**: `web/default/src/features/usage-statistics/`(api+index+6 components), 6 个 `routes/_authenticated/*/index.tsx` 薄壳
+- **核心文件**: `web/default/src/hooks/use-sidebar-data.ts` — Statistics 侧边栏分区(6 项)
+- **依赖**: 后端 [3]+[4] 的 API 端点；i18n key 见 [5]
+- **注意**: `routeTree.gen.ts` 自动生成，无需手改
+- **回滚**: 删新增文件 + 撤 sidebar 分区
+
+---
+
 ## 升级冲突重点关注
 
 按冲突概率从高到低（升级时优先核对这些文件）：
