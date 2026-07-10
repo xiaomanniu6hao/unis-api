@@ -436,6 +436,9 @@ func RequestOpenAI2ClaudeMessage(c *gin.Context, textRequest dto.GeneralOpenAIRe
 
 	claudeRequest.Prompt = ""
 	claudeRequest.Messages = claudeMessages
+	if c != nil {
+		c.Set("claude_request", &claudeRequest)
+	}
 	return &claudeRequest, nil
 }
 

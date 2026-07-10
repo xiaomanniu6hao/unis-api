@@ -116,6 +116,10 @@ var MemoryCacheEnabled bool
 
 var LogConsumeEnabled = true
 
+// LogUserInputEnabled 控制是否在消费日志中记录用户输入内容（仅 Claude，按中文过滤）。
+// 默认关闭；需在管理后台开启。对应 MIXAPI 的同名开关。
+var LogUserInputEnabled = false
+
 var TLSInsecureSkipVerify bool
 var InsecureTLSConfig = &tls.Config{InsecureSkipVerify: true}
 
