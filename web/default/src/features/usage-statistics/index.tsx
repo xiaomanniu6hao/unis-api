@@ -25,6 +25,8 @@ import { DistributionTable } from './components/distribution-table'
 import { RankUsageStatistics } from './components/rank-usage-statistics'
 import { UsageStatsTable } from './components/usage-stats-table'
 
+export { RankUsageStatistics }
+
 function defaultDayRange(days: number): [string, string] {
   const end = new Date()
   const start = new Date()
