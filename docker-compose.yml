@@ -4,30 +4,29 @@
 #   1. docker-compose up -d
 #   2. Access at http://localhost:3000
 #
-# Using MySQL instead of PostgreSQL:
-#   1. Comment out the postgres service and SQL_DSN line 15
-#   2. Uncomment the mysql service and SQL_DSN line 16
-#   3. Uncomment mysql in depends_on (line 28)
-#   4. Uncomment mysql_data in volumes section (line 64)
-#
-# ⚠️  IMPORTANT: Change all default passwords before deploying to production!
-
+# Using the EXTERNAL MySQL started by start_mysql.sh (already running, has data,
+# do NOT recreate). new-api connects to it via the host gateway.
+#   库: mix-api   用户: mixapi   密码: 123456   端口: 3306 (宿主机暴露)
+# 如改了 start_mysql.sh 的账号/库/端口，这里 SQL_DSN 同步改即可。
 version: '3.4' # For compatibility with older Docker versions
 
 services:
   new-api:
-    image: calciumion/new-api:latest
+# 镜像：用本地构建的 unis-api:local（含二开改动），先运行 `bash build.sh` 构建。
+# 如需改回官方镜像，把 image 换成 calciumion/new-api:latest。
+    image: unis-api:local
     container_name: new-api
     restart: always
     command: --log-dir /app/logs
     ports:
-      - "3000:3000"
+      - "9003:3000"
     volumes:
       - ./data:/data
       - ./logs:/app/logs
     environment:
-      - SQL_DSN=postgresql://root:123456@postgres:5432/new-api # ⚠️ IMPORTANT: Change the password in production!
-#      - SQL_DSN=root:123456@tcp(mysql:3306)/new-api  # Point to the mysql service, uncomment if using MySQL
+      # 连接 start_mysql.sh 启动的外部 MySQL（库 mix-api，用户 mixapi）
+      - SQL_DSN=mixapi:123456@tcp(host.docker.internal:3306)/mix-api
+#      - SQL_DSN=postgresql://root:123456@postgres:5432/new-api  # 原默认 PostgreSQL（已弃用，改用外部 MySQL）
 #      - LOG_SQL_DSN=postgresql://root:123456@postgres:5432/new-api-log # OPTIONAL: If you want a separate database for logging, uncomment and set this
 #      - LOG_SQL_DSN=clickhouse://default:123456@clickhouse:9000/new_api_logs # OPTIONAL: Use ClickHouse for logs only; also uncomment clickhouse in depends_on and the clickhouse service below
 #      - LOG_SQL_CLICKHOUSE_TTL_DAYS=0 # OPTIONAL: ClickHouse log retention days. Unset or 0 disables automatic deletion; set to e.g. 30 to keep 30 days
@@ -48,9 +47,11 @@ services:
 
     depends_on:
       - redis
-      - postgres
-#      - mysql  # Uncomment if using MySQL
-#      - clickhouse  # Uncomment if using ClickHouse for LOG_SQL_DSN
+#      - postgres  # 已弃用：改用 start_mysql.sh 启动的外部 MySQL
+#      - mysql  # 外部 MySQL 不在 compose 网络内，通过宿主机网关连接，无需 depends_on
+    # Linux 上让容器能解析 host.docker.internal 到宿主机（连外部 MySQL 用）
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     networks:
       - new-api-network
     healthcheck:
@@ -67,18 +68,20 @@ services:
     networks:
       - new-api-network
 
-  postgres:
-    image: postgres:15
-    container_name: postgres
-    restart: always
-    environment:
-      POSTGRES_USER: root
-      POSTGRES_PASSWORD: 123456  # ⚠️ IMPORTANT: Change this password in production!
-      POSTGRES_DB: new-api
-    volumes:
-      - pg_data:/var/lib/postgresql/data
-    networks:
-      - new-api-network
+  # PostgreSQL 已弃用：改用 start_mysql.sh 启动的外部 MySQL。
+  # 如需回退到 PostgreSQL，取消下面注释并把上方 SQL_DSN 换回 postgresql 版本。
+#  postgres:
+#    image: postgres:15
+#    container_name: postgres
+#    restart: always
+#    environment:
+#      POSTGRES_USER: root
+#      POSTGRES_PASSWORD: 123456  # ⚠️ IMPORTANT: Change this password in production!
+#      POSTGRES_DB: new-api
+#    volumes:
+#      - pg_data:/var/lib/postgresql/data
+#    networks:
+#      - new-api-network
 #    ports:
 #      - "5432:5432"  # Uncomment if you need to access PostgreSQL from outside Docker
 
@@ -112,11 +115,6 @@ services:
 #    ports:
 #      - "8123:8123"  # HTTP interface, uncomment if you need external access
 #      - "9000:9000"  # Native interface used by the LOG_SQL_DSN example above
-
-volumes:
-  pg_data:
-#  mysql_data:
-#  clickhouse_data:
 
 networks:
   new-api-network:

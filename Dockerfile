@@ -22,6 +22,9 @@ RUN cd classic && VITE_REACT_APP_VERSION=$(cat /build/VERSION) bun run build
 
 FROM golang:1.26.1-alpine@sha256:2389ebfa5b7f43eeafbd6be0c3700cc46690ef842ad962f6c5bd6be49ed82039 AS builder2
 ENV GO111MODULE=on CGO_ENABLED=0
+# Go 模块代理（国内服务器拉 proxy.golang.org 会超时，走七牛 goproxy.cn）
+ENV GOPROXY=https://goproxy.cn,direct
+ENV GOSUMDB=sum.golang.google.cn
 
 ARG TARGETOS
 ARG TARGETARCH
