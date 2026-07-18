@@ -246,18 +246,14 @@ export function DistributionTable({
                                 key={g}
                                 className='px-3 py-2 text-right text-xs tabular-nums'
                               >
-                                {cnt > 0 ? (
-                                  <span className='inline-flex items-baseline gap-1'>
-                                    {formatCompactNumber(cnt)}
-                                    {showPercent && (
-                                      <span className='text-muted-foreground'>
-                                        ({pct.toFixed(1)}%)
-                                      </span>
-                                    )}
-                                  </span>
-                                ) : (
-                                  '-'
-                                )}
+                                <span className='inline-flex items-baseline gap-1'>
+                                  {formatCompactNumber(cnt)}
+                                  {showPercent && (
+                                    <span className='text-muted-foreground'>
+                                      ({pct.toFixed(1)}%)
+                                    </span>
+                                  )}
+                                </span>
                               </TableCell>
                             )
                           })}
