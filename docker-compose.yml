@@ -4,10 +4,10 @@
 #   1. docker-compose up -d
 #   2. Access at http://localhost:3000
 #
-# Using the EXTERNAL MySQL started by start_mysql.sh (already running, has data,
+# Using the EXTERNAL MySQL started by start_mysql_new.sh (already running, has data,
 # do NOT recreate). new-api connects to it via the host gateway.
-#   库: mix-api   用户: mixapi   密码: 123456   端口: 3306 (宿主机暴露)
-# 如改了 start_mysql.sh 的账号/库/端口，这里 SQL_DSN 同步改即可。
+#   库: unisapi   用户: unisapi   密码: 123456   端口: 3307 (宿主机暴露)
+# 如改了 start_mysql_new.sh 的账号/库/端口，这里 SQL_DSN 同步改即可。
 version: '3.4' # For compatibility with older Docker versions
 
 services:
@@ -24,8 +24,8 @@ services:
       - ./data:/data
       - ./logs:/app/logs
     environment:
-      # 连接 start_mysql.sh 启动的外部 MySQL（库 mix-api，用户 mixapi）
-      - SQL_DSN=mixapi:123456@tcp(host.docker.internal:3306)/mix-api
+      # 连接 start_mysql_new.sh 启动的外部 MySQL（库 unisapi，用户 unisapi，端口 3307）
+      - SQL_DSN=unisapi:123456@tcp(host.docker.internal:3307)/unisapi?parseTime=true&charset=utf8mb4
 #      - SQL_DSN=postgresql://root:123456@postgres:5432/new-api  # 原默认 PostgreSQL（已弃用，改用外部 MySQL）
 #      - LOG_SQL_DSN=postgresql://root:123456@postgres:5432/new-api-log # OPTIONAL: If you want a separate database for logging, uncomment and set this
 #      - LOG_SQL_DSN=clickhouse://default:123456@clickhouse:9000/new_api_logs # OPTIONAL: Use ClickHouse for logs only; also uncomment clickhouse in depends_on and the clickhouse service below
