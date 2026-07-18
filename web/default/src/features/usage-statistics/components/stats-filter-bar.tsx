@@ -21,6 +21,7 @@ import { useTranslation } from 'react-i18next'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Switch } from '@/components/ui/switch'
 import {
   Select,
   SelectContent,
@@ -48,9 +49,12 @@ type StatsFilterBarProps = {
   tokens: StatsTokenOption[]
   showGroupBy?: boolean
   showTokenFilter?: boolean
+  showPercentToggle?: boolean
+  percent?: boolean
+  onTogglePercent?: (next: boolean) => void
 }
 
-// 统计页共享筛选条：日期范围 + 令牌 + 模型名 +（可选）分组方式。
+// 统计页共享筛选条：日期范围 + 令牌 + 模型名 +（可选）分组方式 +（可选）占比开关。
 export function StatsFilterBar({
   value,
   onChange,
@@ -61,6 +65,9 @@ export function StatsFilterBar({
   tokens,
   showGroupBy = false,
   showTokenFilter = true,
+  showPercentToggle = false,
+  percent = false,
+  onTogglePercent,
 }: StatsFilterBarProps) {
   const { t } = useTranslation()
 
@@ -161,6 +168,14 @@ export function StatsFilterBar({
           {exporting ? t('Exporting...') : t('Export CSV')}
         </Button>
       </div>
+      {showPercentToggle && (
+        <div className='flex items-center gap-2'>
+          <label className='text-muted-foreground flex items-center gap-2 text-xs'>
+            {t('Show Percentage')}
+            <Switch checked={percent} onCheckedChange={onTogglePercent} />
+          </label>
+        </div>
+      )}
     </div>
   )
 }

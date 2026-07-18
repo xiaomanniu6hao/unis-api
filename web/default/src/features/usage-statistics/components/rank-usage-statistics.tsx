@@ -20,7 +20,7 @@ import { useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
-import { PageTransition } from '@/components/page-transition'
+import { SectionPageLayout } from '@/components/layout'
 import { ErrorState } from '@/components/error-state'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -135,47 +135,48 @@ export function RankUsageStatistics() {
   }
 
   return (
-    <PageTransition className='mx-auto w-full max-w-[1400px] space-y-4 px-4 py-6 sm:px-6'>
-      <h1 className='text-xl font-semibold'>{t('Usage Ranking')}</h1>
-      <div className='space-y-4'>
-        <StatsFilterBar
-          value={filters}
-          onChange={setFilters}
-          onSearch={handleSearch}
-          onReset={handleReset}
-          onExport={handleExport}
-          tokens={tokensQuery.data ?? []}
-          showGroupBy
-          showTokenFilter={false}
-        />
+    <SectionPageLayout>
+      <SectionPageLayout.Title>{t('Usage Ranking')}</SectionPageLayout.Title>
+      <SectionPageLayout.Content>
+        <div className='space-y-4'>
+          <StatsFilterBar
+            value={filters}
+            onChange={setFilters}
+            onSearch={handleSearch}
+            onReset={handleReset}
+            onExport={handleExport}
+            tokens={tokensQuery.data ?? []}
+            showGroupBy
+            showTokenFilter={false}
+          />
 
-        <StatsSummaryCards summary={summary} />
+          <StatsSummaryCards summary={summary} />
 
-        <div className='bg-card overflow-hidden rounded-lg border'>
-          {statsQuery.isLoading ? (
-            <div className='space-y-2 p-4'>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} className='h-9 w-full rounded-md' />
-              ))}
-            </div>
-          ) : statsQuery.isError ? (
-            <ErrorState
-              title={t('Failed to load statistics')}
-              description={
-                statsQuery.error instanceof Error
-                  ? statsQuery.error.message
-                  : undefined
-              }
-              onRetry={() => void statsQuery.refetch()}
-              className='min-h-[260px]'
-            />
-          ) : items.length === 0 ? (
-            <div className='text-muted-foreground px-4 py-10 text-center text-sm'>
-              {t('No data')}
-            </div>
-          ) : (
-            <div className='overflow-x-auto'>
-              <Table className='min-w-[1200px]'>
+          <div className='bg-card overflow-hidden rounded-lg border'>
+            {statsQuery.isLoading ? (
+              <div className='space-y-2 p-4'>
+                {Array.from({ length: 6 }).map((_, i) => (
+                  <Skeleton key={i} className='h-9 w-full rounded-md' />
+                ))}
+              </div>
+            ) : statsQuery.isError ? (
+              <ErrorState
+                title={t('Failed to load statistics')}
+                description={
+                  statsQuery.error instanceof Error
+                    ? statsQuery.error.message
+                    : undefined
+                }
+                onRetry={() => void statsQuery.refetch()}
+                className='min-h-[260px]'
+              />
+            ) : items.length === 0 ? (
+              <div className='text-muted-foreground px-4 py-10 text-center text-sm'>
+                {t('No data')}
+              </div>
+            ) : (
+              <div className='overflow-x-auto'>
+                <Table className='min-w-[1200px]'>
                 <TableHeader>
                   <TableRow className='bg-muted/40 hover:bg-muted/40'>
                     <TableHead className='h-9 px-3 text-xs'>
@@ -272,7 +273,8 @@ export function RankUsageStatistics() {
           total={total}
           onPageChange={setPage}
         />
-      </div>
-    </PageTransition>
+        </div>
+      </SectionPageLayout.Content>
+    </SectionPageLayout>
   )
 }

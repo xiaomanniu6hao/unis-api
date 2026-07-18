@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useTranslation } from 'react-i18next'
 
-import { PageTransition } from '@/components/page-transition'
+import { SectionPageLayout } from '@/components/layout'
 
 import { getDailyUsageStats, getMonthlyUsageStats } from './api'
 import { DistributionTable } from './components/distribution-table'
@@ -46,16 +46,20 @@ export function DailyUsageStatistics() {
   const { t } = useTranslation()
   const [start, end] = defaultDayRange(7)
   return (
-    <PageTransition className='mx-auto w-full max-w-[1400px] space-y-4 px-4 py-6 sm:px-6'>
-      <h1 className='text-xl font-semibold'>{t('Daily Usage Statistics')}</h1>
-      <UsageStatsTable
-        fetcher={getDailyUsageStats}
-        exportBase='/api/usage_statistics'
-        initialStartDate={start}
-        initialEndDate={end}
-        dateLabel={t('Date')}
-      />
-    </PageTransition>
+    <SectionPageLayout>
+      <SectionPageLayout.Title>
+        {t('Daily Usage Statistics')}
+      </SectionPageLayout.Title>
+      <SectionPageLayout.Content>
+        <UsageStatsTable
+          fetcher={getDailyUsageStats}
+          exportBase='/api/usage_statistics'
+          initialStartDate={start}
+          initialEndDate={end}
+          dateLabel={t('Date')}
+        />
+      </SectionPageLayout.Content>
+    </SectionPageLayout>
   )
 }
 
@@ -64,16 +68,20 @@ export function MonthlyUsageStatistics() {
   const { t } = useTranslation()
   const [start, end] = defaultMonthRange(6)
   return (
-    <PageTransition className='mx-auto w-full max-w-[1400px] space-y-4 px-4 py-6 sm:px-6'>
-      <h1 className='text-xl font-semibold'>{t('Monthly Usage Statistics')}</h1>
-      <UsageStatsTable
-        fetcher={getMonthlyUsageStats}
-        exportBase='/api/usage_statistics_monthly'
-        initialStartDate={start}
-        initialEndDate={end}
-        dateLabel={t('Month')}
-      />
-    </PageTransition>
+    <SectionPageLayout>
+      <SectionPageLayout.Title>
+        {t('Monthly Usage Statistics')}
+      </SectionPageLayout.Title>
+      <SectionPageLayout.Content>
+        <UsageStatsTable
+          fetcher={getMonthlyUsageStats}
+          exportBase='/api/usage_statistics_monthly'
+          initialStartDate={start}
+          initialEndDate={end}
+          dateLabel={t('Month')}
+        />
+      </SectionPageLayout.Content>
+    </SectionPageLayout>
   )
 }
 
