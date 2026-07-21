@@ -39,8 +39,8 @@ var distributionRangeGroupsCompletion = []string{
 
 // distributionRangeGroupsRequestCount 单问题请求次数分布的桶定义
 var distributionRangeGroupsRequestCount = []string{
-	"1-10", "11-20", "21-30", "31-40", "41-50", "51-60", "61-70", "71-80",
-	"81-90", "91-100", ">100",
+	"1-2", "3-5", "6-10", "11-20", "21-30", "31-40", "41-50", "51-60",
+	"61-70", "71-80", "81-90", "91-100", ">100",
 }
 
 // distributionExcludeTokenNames 排除的 token 名称（playground/测试）
@@ -263,7 +263,9 @@ func GetRequestCountDistribution(startDate, endDate string, tokenIds string, mod
 	query := LOG_DB.Table("(?) as input_stats", subQuery).Select(`
 		token_name,
 		CASE
-			WHEN call_count BETWEEN 1 AND 10 THEN '1-10'
+			WHEN call_count BETWEEN 1 AND 2 THEN '1-2'
+			WHEN call_count BETWEEN 3 AND 5 THEN '3-5'
+			WHEN call_count BETWEEN 6 AND 10 THEN '6-10'
 			WHEN call_count BETWEEN 11 AND 20 THEN '11-20'
 			WHEN call_count BETWEEN 21 AND 30 THEN '21-30'
 			WHEN call_count BETWEEN 31 AND 40 THEN '31-40'

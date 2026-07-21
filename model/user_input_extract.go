@@ -1,88 +1,60 @@
 package model
 
 import (
-	"strings"
-	"unicode"
-
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/dto"
 	"github.com/gin-gonic/gin"
 )
 
-// extractUserInputFromContext 从 gin.Context 中取出 Claude 请求并提取用户输入。
-// 受 common.LogUserInputEnabled 开关控制；非 Claude 请求或开关关闭时返回空串。
+// extractUserInputFromContext 从 gin.Context 中取出已校验的请求并提取最后一条用户输入内容。
+// 受 common.LogUserInputEnabled 开关控制；开关关闭或无法识别请求时返回空串。
+// 优先读取 Claude 请求（原生 Claude 与 OpenAI→Claude 转换路径都会注入 claude_request），
+// 其次读取通用 relay_request（OpenAI/Gemini/Responses 等原生路径注入），覆盖所有协议。
 func extractUserInputFromContext(c *gin.Context) string {
 	if c == nil || !common.LogUserInputEnabled {
 		return ""
 	}
-	raw, exists := c.Get("claude_request")
-	if !exists || raw == nil {
-		return ""
+	if raw, exists := c.Get("claude_request"); exists && raw != nil {
+		if claudeRequest, ok := raw.(*dto.ClaudeRequest); ok && claudeRequest != nil {
+			if content := extractUserInputFromClaudeMessages(claudeRequest.Messages); content != "" {
+				return content
+			}
+		}
 	}
-	claudeRequest, ok := raw.(*dto.ClaudeRequest)
-	if !ok || claudeRequest == nil {
-		return ""
+	if raw, exists := c.Get("relay_request"); exists && raw != nil {
+		if openAIRequest, ok := raw.(*dto.GeneralOpenAIRequest); ok && openAIRequest != nil {
+			return extractUserInputFromOpenAIMessages(openAIRequest.Messages)
+		}
 	}
-	return extractUserInputFromClaudeMessages(claudeRequest.Messages)
+	return ""
 }
 
-// extractUserInputFromClaudeMessages 从 Claude 消息列表中提取最后一条有效的用户输入内容。
-// 仅保留汉字与标点，过滤代码类内容。对应 MIXAPI 的同名逻辑，原样移植。
+// extractUserInputFromOpenAIMessages 从 OpenAI 消息列表中提取最后一条用户输入的文本内容。
+func extractUserInputFromOpenAIMessages(messages []dto.Message) string {
+	if len(messages) == 0 {
+		return ""
+	}
+	for i := len(messages) - 1; i >= 0; i-- {
+		if messages[i].Role == "user" {
+			if content := messages[i].StringContent(); content != "" {
+				return content
+			}
+		}
+	}
+	return ""
+}
+
+// extractUserInputFromClaudeMessages 从 Claude 消息列表中提取最后一条用户输入内容（原文，不过滤）。
 func extractUserInputFromClaudeMessages(messages []dto.ClaudeMessage) string {
 	if len(messages) == 0 {
 		return ""
 	}
-
-	// 从后往前查找，只提取最后一条用户消息
 	for i := len(messages) - 1; i >= 0; i-- {
-		message := messages[i]
-		if message.Role == "user" {
-			content := message.GetStringContent()
-			if content != "" {
-				if isClaudeCodeContent(content) {
-					continue
-				}
-				filteredContent := filterClaudeChineseContent(content)
-				if filteredContent != "" {
-					return filteredContent
-				}
+		if messages[i].Role == "user" {
+			if content := messages[i].GetStringContent(); content != "" {
+				return content
 			}
 		}
 	}
-
-	// 没有找到合适的用户消息时，回退到最后一条消息内容
-	lastContent := messages[len(messages)-1].GetStringContent()
-	if isClaudeCodeContent(lastContent) {
-		return ""
-	}
-	return filterClaudeChineseContent(lastContent)
-}
-
-// isClaudeCodeContent 判断内容是否为代码类（Claude Code 注入的上下文等）
-func isClaudeCodeContent(content string) bool {
-	codeKeywords := []string{
-		"VSCode Open Tabs",
-		"Current Time",
-		"Current Cost",
-		"Current Mode",
-		"REMINDERS",
-		"VSCode Visible Files",
-	}
-	for _, keyword := range codeKeywords {
-		if strings.Contains(content, keyword) {
-			return true
-		}
-	}
-	return false
-}
-
-// filterClaudeChineseContent 只保留汉字与标点字符
-func filterClaudeChineseContent(content string) string {
-	var result []rune
-	for _, r := range content {
-		if unicode.Is(unicode.Scripts["Han"], r) || unicode.IsPunct(r) {
-			result = append(result, r)
-		}
-	}
-	return string(result)
+	return ""
 }

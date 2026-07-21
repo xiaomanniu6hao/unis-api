@@ -80,12 +80,14 @@ import type { LogCleanupTask } from '../types'
 
 const logSettingsSchema = z.object({
   LogConsumeEnabled: z.boolean(),
+  LogUserInputEnabled: z.boolean(),
 })
 
 type LogSettingsFormValues = z.infer<typeof logSettingsSchema>
 
 type LogSettingsSectionProps = {
   defaultEnabled: boolean
+  defaultUserInputEnabled: boolean
 }
 
 type ServerLogInfo = {
@@ -141,6 +143,7 @@ function isActiveLogCleanupTask(task: LogCleanupTask | null) {
 
 export function LogSettingsSection({
   defaultEnabled,
+  defaultUserInputEnabled,
 }: LogSettingsSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
@@ -148,6 +151,7 @@ export function LogSettingsSection({
     resolver: zodResolver(logSettingsSchema),
     defaultValues: {
       LogConsumeEnabled: defaultEnabled,
+      LogUserInputEnabled: defaultUserInputEnabled,
     },
   })
 
@@ -174,8 +178,11 @@ export function LogSettingsSection({
   }, [])
 
   useEffect(() => {
-    form.reset({ LogConsumeEnabled: defaultEnabled })
-  }, [defaultEnabled, form])
+    form.reset({
+      LogConsumeEnabled: defaultEnabled,
+      LogUserInputEnabled: defaultUserInputEnabled,
+    })
+  }, [defaultEnabled, defaultUserInputEnabled, form])
 
   useEffect(() => {
     fetchServerLogInfo()
@@ -257,11 +264,20 @@ export function LogSettingsSection({
   }, [logCleanupActive, logCleanupTaskId, t])
 
   const onSubmit = async (values: LogSettingsFormValues) => {
-    if (values.LogConsumeEnabled === defaultEnabled) return
-    await updateOption.mutateAsync({
-      key: 'LogConsumeEnabled',
-      value: values.LogConsumeEnabled,
-    })
+    const updates: Array<{ key: string; value: boolean }> = []
+    if (values.LogConsumeEnabled !== defaultEnabled) {
+      updates.push({ key: 'LogConsumeEnabled', value: values.LogConsumeEnabled })
+    }
+    if (values.LogUserInputEnabled !== defaultUserInputEnabled) {
+      updates.push({
+        key: 'LogUserInputEnabled',
+        value: values.LogUserInputEnabled,
+      })
+    }
+    if (updates.length === 0) return
+    for (const { key, value } of updates) {
+      await updateOption.mutateAsync({ key, value })
+    }
   }
 
   const handleRequestCleanLogs = () => {
@@ -353,6 +369,30 @@ export function LogSettingsSection({
                   <FormDescription>
                     {t(
                       'Track per-request consumption to power usage analytics. Keeping this on increases database writes.'
+                    )}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+                <FormMessage />
+              </SettingsSwitchItem>
+            )}
+          />
+
+          <FormField
+            control={form.control}
+            name='LogUserInputEnabled'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>{t('Record user input')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Save the last user message of each request to power request-count distribution analytics. Only applies to chat completions (OpenAI/Claude).'
                     )}
                   </FormDescription>
                 </SettingsSwitchContent>

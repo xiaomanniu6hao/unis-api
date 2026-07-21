@@ -123,6 +123,9 @@ func Relay(c *gin.Context, relayFormat types.RelayFormat) {
 		return
 	}
 
+	// 注入已校验的原始请求，供消费日志提取 user_input（受 LogUserInputEnabled 开关控制）
+	c.Set("relay_request", request)
+
 	needSensitiveCheck := setting.ShouldCheckPromptSensitive()
 	needCountToken := constant.CountToken
 	// Avoid building huge CombineText (strings.Join) when token counting and sensitive check are both disabled.

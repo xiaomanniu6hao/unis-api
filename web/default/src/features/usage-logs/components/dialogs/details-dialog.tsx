@@ -1164,6 +1164,34 @@ export function DetailsDialog(props: DetailsDialogProps) {
           </DetailSection>
         )}
 
+        {/* User input (consume logs with captured user_input) */}
+        {isConsume && props.log.user_input && (
+          <div className='space-y-1.5'>
+            <Label className='text-xs font-semibold'>
+              {t('User Input')}
+            </Label>
+            <div className='bg-muted/30 relative min-w-0 overflow-hidden rounded-md border p-2.5'>
+              <Button
+                variant='ghost'
+                size='sm'
+                className='absolute top-1.5 right-1.5 h-5 w-5 p-0'
+                onClick={() => copyToClipboard(props.log.user_input)}
+                title={t('Copy to clipboard')}
+                aria-label={t('Copy to clipboard')}
+              >
+                {copiedText === props.log.user_input ? (
+                  <Check className='size-3 text-green-600' />
+                ) : (
+                  <Copy className='size-3' />
+                )}
+              </Button>
+              <p className='min-w-0 pr-6 text-xs leading-relaxed break-all whitespace-pre-wrap sm:wrap-break-word'>
+                {props.log.user_input}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Content */}
         {details && (
           <div className='space-y-1.5'>
