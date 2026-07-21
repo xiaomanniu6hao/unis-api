@@ -106,6 +106,7 @@ export function DistributionTable({
   const data = statsQuery.data?.data
   const items = data?.items ?? []
   const rangeGroups = data?.range_groups ?? []
+  const bucketSummary = data?.bucket_summary ?? {}
   const total = data?.total ?? 0
 
   // 按 token 聚合：每个 token 在各桶的 count 与后端返回的 percent、总计。
@@ -164,6 +165,12 @@ export function DistributionTable({
       // axios 拦截器已 toast
     }
   }
+
+  // 全局合计行：每个桶跨所有 token 的总和（后端 bucket_summary，不受分页影响）。
+  const summaryRowTotal = rangeGroups.reduce(
+    (sum, g) => sum + (bucketSummary[g] ?? 0),
+    0
+  )
 
   return (
     <SectionPageLayout>
@@ -228,6 +235,36 @@ export function DistributionTable({
                     </TableRow>
                   </TableHeader>
                   <TableBody>
+                    <TableRow className='bg-muted/30 hover:bg-muted/30'>
+                      <TableCell className='px-3 py-2 text-xs font-semibold'>
+                        {t('All Tokens')}
+                      </TableCell>
+                      {rangeGroups.map((g) => {
+                        const cnt = bucketSummary[g] ?? 0
+                        const pct =
+                          summaryRowTotal > 0
+                            ? (cnt / summaryRowTotal) * 100
+                            : 0
+                        return (
+                          <TableCell
+                            key={g}
+                            className='px-3 py-2 text-right text-xs font-semibold tabular-nums'
+                          >
+                            <span className='inline-flex items-baseline gap-1'>
+                              {formatCompactNumber(cnt)}
+                              {showPercent && (
+                                <span className='text-muted-foreground'>
+                                  ({pct.toFixed(1)}%)
+                                </span>
+                              )}
+                            </span>
+                          </TableCell>
+                        )
+                      })}
+                      <TableCell className='px-3 py-2 text-right text-xs font-bold tabular-nums'>
+                        {formatCompactNumber(summaryRowTotal)}
+                      </TableCell>
+                    </TableRow>
                     {tokenOrder.map((name) => {
                       const bucket = rows.get(name)!
                       let sum = 0

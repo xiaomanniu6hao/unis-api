@@ -93,12 +93,14 @@ func distributionGroupExpr(groupBy string) string {
 }
 
 // completeAndPageDistribution 补全分布矩阵（缺失桶补 0）并按 token 名分页。
-// 返回分页后的分布数据、桶列表、token 总数。
-func completeAndPageDistribution(distributions []*DistributionData, rangeGroups []string, page, pageSize int) ([]*DistributionData, []string, int64) {
+// 返回分页后的分布数据、桶列表、token 总数、以及每个桶的全局合计（跨所有 token，不受分页影响）。
+func completeAndPageDistribution(distributions []*DistributionData, rangeGroups []string, page, pageSize int) ([]*DistributionData, []string, int64, map[string]int64) {
 	tokenTotals := make(map[string]int64)
+	bucketTotals := make(map[string]int64)
 	var grandTotal int64
 	for _, d := range distributions {
 		tokenTotals[d.TokenName] += d.Count
+		bucketTotals[d.RangeGroup] += d.Count
 		grandTotal += d.Count
 	}
 
@@ -161,11 +163,11 @@ func completeAndPageDistribution(distributions []*DistributionData, rangeGroups 
 		}
 	}
 
-	return pagedDistributions, rangeGroups, total
+	return pagedDistributions, rangeGroups, total, bucketTotals
 }
 
 // GetPromptTokensDistribution 输入 tokens 分布统计
-func GetPromptTokensDistribution(startDate, endDate string, tokenIds string, modelName string, userId int, groupBy string, page, pageSize int) ([]*DistributionData, []string, int64, error) {
+func GetPromptTokensDistribution(startDate, endDate string, tokenIds string, modelName string, userId int, groupBy string, page, pageSize int) ([]*DistributionData, []string, int64, map[string]int64, error) {
 	var distributions []*DistributionData
 	groupByExpr := distributionGroupExpr(groupBy)
 
@@ -201,15 +203,15 @@ func GetPromptTokensDistribution(startDate, endDate string, tokenIds string, mod
 
 	err := query.Group(groupByExpr + ", range_grp").Order("token_name, MIN(prompt_tokens)").Scan(&distributions).Error
 	if err != nil {
-		return nil, []string{}, 0, err
+		return nil, []string{}, 0, nil, err
 	}
 
-	paged, groups, total := completeAndPageDistribution(distributions, distributionRangeGroupsPrompt, page, pageSize)
-	return paged, groups, total, nil
+	paged, groups, total, summary := completeAndPageDistribution(distributions, distributionRangeGroupsPrompt, page, pageSize)
+	return paged, groups, total, summary, nil
 }
 
 // GetCompletionTokensDistribution 输出 tokens 分布统计
-func GetCompletionTokensDistribution(startDate, endDate string, tokenIds string, modelName string, userId int, groupBy string, page, pageSize int) ([]*DistributionData, []string, int64, error) {
+func GetCompletionTokensDistribution(startDate, endDate string, tokenIds string, modelName string, userId int, groupBy string, page, pageSize int) ([]*DistributionData, []string, int64, map[string]int64, error) {
 	var distributions []*DistributionData
 	groupByExpr := distributionGroupExpr(groupBy)
 
@@ -238,15 +240,15 @@ func GetCompletionTokensDistribution(startDate, endDate string, tokenIds string,
 
 	err := query.Group(groupByExpr + ", range_grp").Order("token_name, MIN(completion_tokens)").Scan(&distributions).Error
 	if err != nil {
-		return nil, []string{}, 0, err
+		return nil, []string{}, 0, nil, err
 	}
 
-	paged, groups, total := completeAndPageDistribution(distributions, distributionRangeGroupsCompletion, page, pageSize)
-	return paged, groups, total, nil
+	paged, groups, total, summary := completeAndPageDistribution(distributions, distributionRangeGroupsCompletion, page, pageSize)
+	return paged, groups, total, summary, nil
 }
 
 // GetRequestCountDistribution 单问题请求次数分布统计（依赖 logs.user_input）
-func GetRequestCountDistribution(startDate, endDate string, tokenIds string, modelName string, userId int, groupBy string, page, pageSize int) ([]*DistributionData, []string, int64, error) {
+func GetRequestCountDistribution(startDate, endDate string, tokenIds string, modelName string, userId int, groupBy string, page, pageSize int) ([]*DistributionData, []string, int64, map[string]int64, error) {
 	var distributions []*DistributionData
 	groupByExpr := distributionGroupExpr(groupBy)
 
@@ -282,9 +284,9 @@ func GetRequestCountDistribution(startDate, endDate string, tokenIds string, mod
 
 	err := query.Order("token_name, MIN(call_count)").Scan(&distributions).Error
 	if err != nil {
-		return nil, []string{}, 0, err
+		return nil, []string{}, 0, nil, err
 	}
 
-	paged, groups, total := completeAndPageDistribution(distributions, distributionRangeGroupsRequestCount, page, pageSize)
-	return paged, groups, total, nil
+	paged, groups, total, summary := completeAndPageDistribution(distributions, distributionRangeGroupsRequestCount, page, pageSize)
+	return paged, groups, total, summary, nil
 }

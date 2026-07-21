@@ -27,24 +27,10 @@ import { UsageStatsTable } from './components/usage-stats-table'
 
 export { RankUsageStatistics }
 
-function defaultDayRange(days: number): [string, string] {
-  const end = new Date()
-  const start = new Date()
-  start.setDate(start.getDate() - days)
-  return [start.toISOString().slice(0, 10), end.toISOString().slice(0, 10)]
-}
-
-function defaultMonthRange(months: number): [string, string] {
-  const end = new Date()
-  const start = new Date()
-  start.setMonth(start.getMonth() - months)
-  return [start.toISOString().slice(0, 7), end.toISOString().slice(0, 7)]
-}
-
 // 日用量统计页
 export function DailyUsageStatistics() {
   const { t } = useTranslation()
-  const [start, end] = defaultDayRange(7)
+  const today = new Date().toISOString().slice(0, 10)
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>
@@ -54,8 +40,8 @@ export function DailyUsageStatistics() {
         <UsageStatsTable
           fetcher={getDailyUsageStats}
           exportBase='/api/usage_statistics'
-          initialStartDate={start}
-          initialEndDate={end}
+          initialStartDate={today}
+          initialEndDate={today}
           dateLabel={t('Date')}
         />
       </SectionPageLayout.Content>
@@ -66,7 +52,7 @@ export function DailyUsageStatistics() {
 // 月用量统计页
 export function MonthlyUsageStatistics() {
   const { t } = useTranslation()
-  const [start, end] = defaultMonthRange(6)
+  const thisMonth = new Date().toISOString().slice(0, 7)
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>
@@ -76,8 +62,8 @@ export function MonthlyUsageStatistics() {
         <UsageStatsTable
           fetcher={getMonthlyUsageStats}
           exportBase='/api/usage_statistics_monthly'
-          initialStartDate={start}
-          initialEndDate={end}
+          initialStartDate={thisMonth}
+          initialEndDate={thisMonth}
           dateLabel={t('Month')}
         />
       </SectionPageLayout.Content>

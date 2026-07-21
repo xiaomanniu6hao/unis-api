@@ -39,7 +39,7 @@ func distributionParams(c *gin.Context) (string, string, string, string, string,
 // GetPromptTokensDistribution 输入 tokens 分布（管理员）
 func GetPromptTokensDistribution(c *gin.Context) {
 	startDate, endDate, tokenIds, modelName, groupBy, page, pageSize := distributionParams(c)
-	distributions, rangeGroups, total, err := model.GetPromptTokensDistribution(startDate, endDate, tokenIds, modelName, 0, groupBy, page, pageSize)
+	distributions, rangeGroups, total, summary, err := model.GetPromptTokensDistribution(startDate, endDate, tokenIds, modelName, 0, groupBy, page, pageSize)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -48,6 +48,7 @@ func GetPromptTokensDistribution(c *gin.Context) {
 		"items":        distributions,
 		"range_groups": rangeGroups,
 		"total":        total,
+		"bucket_summary": summary,
 		"page":         page,
 		"page_size":    pageSize,
 	})
@@ -57,7 +58,7 @@ func GetPromptTokensDistribution(c *gin.Context) {
 func GetUserPromptTokensDistribution(c *gin.Context) {
 	userId := c.GetInt("id")
 	startDate, endDate, tokenIds, modelName, groupBy, page, pageSize := distributionParams(c)
-	distributions, rangeGroups, total, err := model.GetPromptTokensDistribution(startDate, endDate, tokenIds, modelName, userId, groupBy, page, pageSize)
+	distributions, rangeGroups, total, summary, err := model.GetPromptTokensDistribution(startDate, endDate, tokenIds, modelName, userId, groupBy, page, pageSize)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -66,6 +67,7 @@ func GetUserPromptTokensDistribution(c *gin.Context) {
 		"items":        distributions,
 		"range_groups": rangeGroups,
 		"total":        total,
+		"bucket_summary": summary,
 		"page":         page,
 		"page_size":    pageSize,
 	})
@@ -74,7 +76,7 @@ func GetUserPromptTokensDistribution(c *gin.Context) {
 // GetCompletionTokensDistribution 输出 tokens 分布（管理员）
 func GetCompletionTokensDistribution(c *gin.Context) {
 	startDate, endDate, tokenIds, modelName, groupBy, page, pageSize := distributionParams(c)
-	distributions, rangeGroups, total, err := model.GetCompletionTokensDistribution(startDate, endDate, tokenIds, modelName, 0, groupBy, page, pageSize)
+	distributions, rangeGroups, total, summary, err := model.GetCompletionTokensDistribution(startDate, endDate, tokenIds, modelName, 0, groupBy, page, pageSize)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -83,6 +85,7 @@ func GetCompletionTokensDistribution(c *gin.Context) {
 		"items":        distributions,
 		"range_groups": rangeGroups,
 		"total":        total,
+		"bucket_summary": summary,
 		"page":         page,
 		"page_size":    pageSize,
 	})
@@ -92,7 +95,7 @@ func GetCompletionTokensDistribution(c *gin.Context) {
 func GetUserCompletionTokensDistribution(c *gin.Context) {
 	userId := c.GetInt("id")
 	startDate, endDate, tokenIds, modelName, groupBy, page, pageSize := distributionParams(c)
-	distributions, rangeGroups, total, err := model.GetCompletionTokensDistribution(startDate, endDate, tokenIds, modelName, userId, groupBy, page, pageSize)
+	distributions, rangeGroups, total, summary, err := model.GetCompletionTokensDistribution(startDate, endDate, tokenIds, modelName, userId, groupBy, page, pageSize)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -101,6 +104,7 @@ func GetUserCompletionTokensDistribution(c *gin.Context) {
 		"items":        distributions,
 		"range_groups": rangeGroups,
 		"total":        total,
+		"bucket_summary": summary,
 		"page":         page,
 		"page_size":    pageSize,
 	})
@@ -109,7 +113,7 @@ func GetUserCompletionTokensDistribution(c *gin.Context) {
 // GetRequestCountDistribution 单问题请求次数分布（管理员）
 func GetRequestCountDistribution(c *gin.Context) {
 	startDate, endDate, tokenIds, modelName, groupBy, page, pageSize := distributionParams(c)
-	distributions, rangeGroups, total, err := model.GetRequestCountDistribution(startDate, endDate, tokenIds, modelName, 0, groupBy, page, pageSize)
+	distributions, rangeGroups, total, summary, err := model.GetRequestCountDistribution(startDate, endDate, tokenIds, modelName, 0, groupBy, page, pageSize)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -118,6 +122,7 @@ func GetRequestCountDistribution(c *gin.Context) {
 		"items":        distributions,
 		"range_groups": rangeGroups,
 		"total":        total,
+		"bucket_summary": summary,
 		"page":         page,
 		"page_size":    pageSize,
 	})
@@ -127,7 +132,7 @@ func GetRequestCountDistribution(c *gin.Context) {
 func GetUserRequestCountDistribution(c *gin.Context) {
 	userId := c.GetInt("id")
 	startDate, endDate, tokenIds, modelName, groupBy, page, pageSize := distributionParams(c)
-	distributions, rangeGroups, total, err := model.GetRequestCountDistribution(startDate, endDate, tokenIds, modelName, userId, groupBy, page, pageSize)
+	distributions, rangeGroups, total, summary, err := model.GetRequestCountDistribution(startDate, endDate, tokenIds, modelName, userId, groupBy, page, pageSize)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -136,6 +141,7 @@ func GetUserRequestCountDistribution(c *gin.Context) {
 		"items":        distributions,
 		"range_groups": rangeGroups,
 		"total":        total,
+		"bucket_summary": summary,
 		"page":         page,
 		"page_size":    pageSize,
 	})
@@ -167,20 +173,20 @@ func exportDistribution(c *gin.Context, kind string) {
 	if userId > 0 && c.Query("admin") == "" {
 		switch kind {
 		case "prompt":
-			distributions, rangeGroups, _, err = model.GetPromptTokensDistribution(startDate, endDate, tokenIds, modelName, userId, groupBy, 1, 10000)
+			distributions, rangeGroups, _, _, err = model.GetPromptTokensDistribution(startDate, endDate, tokenIds, modelName, userId, groupBy, 1, 10000)
 		case "completion":
-			distributions, rangeGroups, _, err = model.GetCompletionTokensDistribution(startDate, endDate, tokenIds, modelName, userId, groupBy, 1, 10000)
+			distributions, rangeGroups, _, _, err = model.GetCompletionTokensDistribution(startDate, endDate, tokenIds, modelName, userId, groupBy, 1, 10000)
 		case "request_count":
-			distributions, rangeGroups, _, err = model.GetRequestCountDistribution(startDate, endDate, tokenIds, modelName, userId, groupBy, 1, 10000)
+			distributions, rangeGroups, _, _, err = model.GetRequestCountDistribution(startDate, endDate, tokenIds, modelName, userId, groupBy, 1, 10000)
 		}
 	} else {
 		switch kind {
 		case "prompt":
-			distributions, rangeGroups, _, err = model.GetPromptTokensDistribution(startDate, endDate, tokenIds, modelName, 0, groupBy, 1, 10000)
+			distributions, rangeGroups, _, _, err = model.GetPromptTokensDistribution(startDate, endDate, tokenIds, modelName, 0, groupBy, 1, 10000)
 		case "completion":
-			distributions, rangeGroups, _, err = model.GetCompletionTokensDistribution(startDate, endDate, tokenIds, modelName, 0, groupBy, 1, 10000)
+			distributions, rangeGroups, _, _, err = model.GetCompletionTokensDistribution(startDate, endDate, tokenIds, modelName, 0, groupBy, 1, 10000)
 		case "request_count":
-			distributions, rangeGroups, _, err = model.GetRequestCountDistribution(startDate, endDate, tokenIds, modelName, 0, groupBy, 1, 10000)
+			distributions, rangeGroups, _, _, err = model.GetRequestCountDistribution(startDate, endDate, tokenIds, modelName, 0, groupBy, 1, 10000)
 		}
 	}
 	if err != nil {

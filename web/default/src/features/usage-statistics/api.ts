@@ -89,6 +89,8 @@ export type StatsResponse<T> = {
     page: number
     page_size: number
     summary?: UsageSummary
+    // 分布统计：每个桶的全局合计（跨所有 token，不受分页影响），key=range_grp
+    bucket_summary?: Record<string, number>
     range_groups?: string[]
   }
 }

@@ -47,18 +47,18 @@ import { StatsSummaryCards } from './stats-summary-cards'
 
 const PAGE_SIZE = 20
 
-function defaultMonthRange(months: number): [string, string] {
-  const end = new Date()
-  const start = new Date()
-  start.setMonth(start.getMonth() - months)
-  return [start.toISOString().slice(0, 7), end.toISOString().slice(0, 7)]
+// 默认取当月 1 日到今天（YYYY-MM-DD）。
+function defaultMonthStartRange(): [string, string] {
+  const now = new Date()
+  const start = new Date(now.getFullYear(), now.getMonth(), 1)
+  return [start.toISOString().slice(0, 10), now.toISOString().slice(0, 10)]
 }
 
 // 用量排序统计页：按 token 聚合，展示请求/token/额度/缓存命中率/min/max/问题数。
 export function RankUsageStatistics() {
   const { t } = useTranslation()
   const isAdmin = useIsAdmin()
-  const [startInit, endInit] = defaultMonthRange(6)
+  const [startInit, endInit] = defaultMonthStartRange()
 
   const [filters, setFilters] = useState<StatsFilterValues>({
     startDate: startInit,
