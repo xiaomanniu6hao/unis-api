@@ -23,6 +23,7 @@ import { useTranslation } from 'react-i18next'
 import { SectionPageLayout } from '@/components/layout'
 import { ErrorState } from '@/components/error-state'
 import { Skeleton } from '@/components/ui/skeleton'
+import dayjs from '@/lib/dayjs'
 import {
   Table,
   TableBody,
@@ -47,9 +48,10 @@ import { StatsPagination } from './stats-pagination'
 const PAGE_SIZE = 20
 
 function defaultMonthStartRange(): [string, string] {
-  const now = new Date()
-  const start = new Date(now.getFullYear(), now.getMonth(), 1)
-  return [start.toISOString().slice(0, 10), now.toISOString().slice(0, 10)]
+  // 用 dayjs 本地时区格式化，避免 toISOString() 转 UTC 导致跨月/跨日偏移
+  const now = dayjs()
+  const start = now.startOf('month')
+  return [start.format('YYYY-MM-DD'), now.format('YYYY-MM-DD')]
 }
 
 type DistributionTableProps = {

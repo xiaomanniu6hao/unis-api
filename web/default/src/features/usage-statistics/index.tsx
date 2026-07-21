@@ -19,6 +19,7 @@ For commercial licensing, please contact support@quantumnous.com
 import { useTranslation } from 'react-i18next'
 
 import { SectionPageLayout } from '@/components/layout'
+import dayjs from '@/lib/dayjs'
 
 import { getDailyUsageStats, getMonthlyUsageStats } from './api'
 import { DistributionTable } from './components/distribution-table'
@@ -30,7 +31,8 @@ export { RankUsageStatistics }
 // 日用量统计页
 export function DailyUsageStatistics() {
   const { t } = useTranslation()
-  const today = new Date().toISOString().slice(0, 10)
+  // 用 dayjs 本地时区格式化，避免 toISOString() 转 UTC 导致日期偏移
+  const today = dayjs().format('YYYY-MM-DD')
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>
@@ -52,7 +54,8 @@ export function DailyUsageStatistics() {
 // 月用量统计页
 export function MonthlyUsageStatistics() {
   const { t } = useTranslation()
-  const thisMonth = new Date().toISOString().slice(0, 7)
+  // 用 dayjs 本地时区格式化，避免 toISOString() 转 UTC 导致月份偏移
+  const thisMonth = dayjs().format('YYYY-MM')
   return (
     <SectionPageLayout>
       <SectionPageLayout.Title>
