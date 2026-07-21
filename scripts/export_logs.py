@@ -9,7 +9,7 @@
   - upstream_request_id   上游返回的请求 ID
   - user_input            用户输入内容（仅 Claude 且 LogUserInputEnabled 开启时记录，否则为空）
   - content               日志描述文本
-  - 以及 id / created_at / type / username / model_name 便于溯源
+  - 以及 id / created_at / type / username / model_name / token_id / token_name 便于溯源
 
 用法:
   python export_logs.py                      # 导出今天的消费日志
@@ -100,7 +100,7 @@ def fetch_logs(host, port, user, passwd, db, start_ts, end_ts):
             cur.execute(
                 """
                 SELECT id, request_id, upstream_request_id, user_input, content,
-                       created_at, type, username, model_name
+                       created_at, type, username, model_name, token_id, token_name
                 FROM logs
                 WHERE created_at >= %s AND created_at < %s AND type = %s
                 ORDER BY created_at ASC, id ASC
@@ -131,6 +131,8 @@ def row_to_obj(row):
         "type_name": LOG_TYPE_NAMES.get(row.get("type"), "unknown"),
         "username": row.get("username") or "",
         "model_name": row.get("model_name") or "",
+        "token_id": row.get("token_id") or 0,
+        "token_name": row.get("token_name") or "",
     }
 
 
