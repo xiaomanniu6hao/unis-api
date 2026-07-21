@@ -353,6 +353,11 @@ func RecordConsumeLog(c *gin.Context, userId int, params RecordConsumeLogParams)
 	otherStr := common.MapToJsonStr(params.Other)
 	// 提取用户输入内容（仅 Claude、受 LogUserInputEnabled 开关控制）
 	userInput := extractUserInputFromContext(c)
+	// [DEBUG user_input] 临时诊断：开关/上下文键/提取结果
+	_, hasClaudeReq := c.Get("claude_request")
+	_, hasRelayReq := c.Get("relay_request")
+	logger.LogInfo(c, fmt.Sprintf("[user_input debug] LogUserInputEnabled=%v has_claude_request=%v has_relay_request=%v userInput_len=%d userInput_preview=%q",
+		common.LogUserInputEnabled, hasClaudeReq, hasRelayReq, len(userInput), common.LocalLogPreview(userInput)))
 	// 判断是否需要记录 IP
 	needRecordIp := false
 	if settingMap, err := GetUserSetting(userId, false); err == nil {
