@@ -110,8 +110,8 @@ func completeAndPageDistribution(distributions []*DistributionData, rangeGroups 
 	for _, d := range distributions {
 		if total, ok := tokenTotals[d.TokenName]; ok && total > 0 {
 			d.Percent = float64(d.Count) / float64(total) * 100
+			d.TotalCount = total
 		}
-		d.TotalCount = grandTotal
 		if grandTotal > 0 {
 			d.TotalPercent = float64(d.Count) / float64(grandTotal) * 100
 		}
