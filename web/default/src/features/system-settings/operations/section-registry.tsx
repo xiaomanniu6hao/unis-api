@@ -22,6 +22,7 @@ import { MonitoringSettingsSection } from '../integrations/monitoring-settings-s
 import { WorkerSettingsSection } from '../integrations/worker-settings-section'
 import { LogSettingsSection } from '../maintenance/log-settings-section'
 import { PerformanceSection } from '../maintenance/performance-section'
+import { StatsSettingsSection } from '../maintenance/stats-settings-section'
 import { UpdateCheckerSection } from '../maintenance/update-checker-section'
 import type { OperationsSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
@@ -99,6 +100,15 @@ const OPERATIONS_SECTIONS = [
       <LogSettingsSection
         defaultEnabled={Boolean(settings.LogConsumeEnabled)}
         defaultUserInputEnabled={Boolean(settings.LogUserInputEnabled)}
+      />
+    ),
+  },
+  {
+    id: 'stats',
+    titleKey: 'Usage Statistics',
+    build: (settings: OperationsSettings) => (
+      <StatsSettingsSection
+        defaultExcludedTokenIds={settings.StatsExcludedTokenIds ?? ''}
       />
     ),
   },

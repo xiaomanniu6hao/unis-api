@@ -120,6 +120,10 @@ var LogConsumeEnabled = true
 // 默认关闭；需在管理后台开启。对应 MIXAPI 的同名开关。
 var LogUserInputEnabled = false
 
+// StatsExcludedTokenIds 统计排除令牌 ID 列表（逗号分隔字符串）。
+// 这些令牌的用量不计入任何统计页（日/月/排序/分布）。空表示不排除。
+var StatsExcludedTokenIds = ""
+
 var TLSInsecureSkipVerify bool
 var InsecureTLSConfig = &tls.Config{InsecureSkipVerify: true}
 

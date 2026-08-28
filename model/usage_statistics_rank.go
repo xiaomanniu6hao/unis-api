@@ -77,6 +77,7 @@ func GetRankUsageStatistics(startDate, endDate string, tokenIds string, modelNam
 		conditions += " AND model_name LIKE ?"
 		params = append(params, "%"+modelName+"%")
 	}
+	conditions, params = appendStatsExclusionCondition(conditions, "token_id", params)
 
 	var sql string
 	var countSQL string
@@ -231,6 +232,7 @@ func GetRankUsageStatisticsSummary(startDate, endDate string, tokenIds string, m
 		conditions += " AND model_name LIKE ?"
 		params = append(params, "%"+modelName+"%")
 	}
+	conditions, params = appendStatsExclusionCondition(conditions, "token_id", params)
 
 	groupField := "token_id, token_name"
 	if groupBy == "prefix" {
@@ -432,6 +434,7 @@ func GetUserRankUsageStatistics(userId int, startDate, endDate string, tokenIds 
 	if modelName != "" {
 		query = query.Where("usage_statistics.model_name LIKE ?", "%"+modelName+"%")
 	}
+	query = applyStatsExclusionGorm(query, "usage_statistics")
 
 	err := query.Count(&total).Error
 	if err != nil {
@@ -470,6 +473,7 @@ func GetUserRankUsageStatistics(userId int, startDate, endDate string, tokenIds 
 		conditions += " AND usage_statistics.model_name LIKE ?"
 		params = append(params, "%"+modelName+"%")
 	}
+	conditions, params = appendStatsExclusionCondition(conditions, "usage_statistics.token_id", params)
 
 	var sql string
 	var countSQL string
@@ -654,6 +658,7 @@ func GetUserRankUsageStatisticsSummary(userId int, startDate, endDate string, to
 		conditions += " AND usage_statistics.model_name LIKE ?"
 		params = append(params, "%"+modelName+"%")
 	}
+	conditions, params = appendStatsExclusionCondition(conditions, "usage_statistics.token_id", params)
 
 	var sql string
 

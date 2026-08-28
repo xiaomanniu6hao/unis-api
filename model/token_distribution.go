@@ -1,6 +1,7 @@
 package model
 
 import (
+	"sort"
 	"strings"
 
 	"gorm.io/gorm"
@@ -26,8 +27,7 @@ type DistributionData struct {
 
 // distributionRangeGroupsPrompt 输入 tokens 分布的桶定义
 var distributionRangeGroupsPrompt = []string{
-	"0-1k", "1-2k", "2-3k", "3-4k", "4-5k", "5-6k", "6-7k", "7-8k", "8-9k",
-	"9-10k", "10-15k", "15-20k", "20-30k", "30-50k", "50-60k", "60-70k",
+	"0-10k", "10-20k", "20-30k", "30-40k", "40-50k", "50-60k", "60-70k",
 	"70-80k", "80-90k", "90-100k", ">100k",
 }
 
@@ -81,6 +81,8 @@ func applyDistributionCommonFilters(query *gorm.DB, tokenIds, modelName string, 
 		query = query.Where("model_name LIKE ?", "%"+modelName+"%")
 	}
 	query = query.Where("token_name NOT IN (?)", distributionExcludeTokenNames)
+	// 全局统计排除令牌（按 token_id）
+	query = applyStatsExclusionGorm(query, "")
 	return query
 }
 
@@ -92,9 +94,10 @@ func distributionGroupExpr(groupBy string) string {
 	return "token_name"
 }
 
-// completeAndPageDistribution 补全分布矩阵（缺失桶补 0）并按 token 名分页。
+// completeAndPageDistribution 补全分布矩阵（缺失桶补 0）并按 token 分页。
 // 返回分页后的分布数据、桶列表、token 总数、以及每个桶的全局合计（跨所有 token，不受分页影响）。
-func completeAndPageDistribution(distributions []*DistributionData, rangeGroups []string, page, pageSize int) ([]*DistributionData, []string, int64, map[string]int64) {
+// sortByTotal 为 true 时，token 行按其总计（所有桶 count 之和）降序排列；否则保留既有 SQL 行序。
+func completeAndPageDistribution(distributions []*DistributionData, rangeGroups []string, page, pageSize int, sortByTotal bool) ([]*DistributionData, []string, int64, map[string]int64) {
 	tokenTotals := make(map[string]int64)
 	bucketTotals := make(map[string]int64)
 	var grandTotal int64
@@ -118,26 +121,14 @@ func completeAndPageDistribution(distributions []*DistributionData, rangeGroups 
 	for name := range tokenTotals {
 		tokenNames = append(tokenNames, name)
 	}
-
-	completeDistributions := make([]*DistributionData, 0, len(distributions)+len(tokenNames)*len(rangeGroups))
-	existingKey := make(map[string]bool, len(distributions))
-	for _, d := range distributions {
-		key := d.TokenName + "|" + d.RangeGroup
-		existingKey[key] = true
-		completeDistributions = append(completeDistributions, d)
-	}
-	for _, tokenName := range tokenNames {
-		for _, rangeGroup := range rangeGroups {
-			key := tokenName + "|" + rangeGroup
-			if !existingKey[key] {
-				completeDistributions = append(completeDistributions, &DistributionData{
-					TokenName:  tokenName,
-					RangeGroup: rangeGroup,
-					Count:      0,
-					Percent:    0,
-				})
+	if sortByTotal {
+		sort.Slice(tokenNames, func(i, j int) bool {
+			ti, tj := tokenTotals[tokenNames[i]], tokenTotals[tokenNames[j]]
+			if ti != tj {
+				return ti > tj
 			}
-		}
+			return tokenNames[i] < tokenNames[j]
+		})
 	}
 
 	total := int64(len(tokenNames))
@@ -149,17 +140,59 @@ func completeAndPageDistribution(distributions []*DistributionData, rangeGroups 
 	if endOffset > len(tokenNames) {
 		endOffset = len(tokenNames)
 	}
-
 	pageTokenNames := tokenNames[offset:endOffset]
-	pageTokenSet := make(map[string]bool, len(pageTokenNames))
-	for _, name := range pageTokenNames {
-		pageTokenSet[name] = true
-	}
 
-	pagedDistributions := make([]*DistributionData, 0)
-	for _, d := range completeDistributions {
-		if pageTokenSet[d.TokenName] {
-			pagedDistributions = append(pagedDistributions, d)
+	pagedDistributions := make([]*DistributionData, 0, len(pageTokenNames)*len(rangeGroups))
+	if sortByTotal {
+		// 按总计降序：行序遵循 pageTokenNames，桶序遵循 rangeGroups。
+		cellMap := make(map[string]*DistributionData, len(distributions))
+		for _, d := range distributions {
+			cellMap[d.TokenName+"|"+d.RangeGroup] = d
+		}
+		for _, tokenName := range pageTokenNames {
+			for _, rangeGroup := range rangeGroups {
+				if d, ok := cellMap[tokenName+"|"+rangeGroup]; ok {
+					pagedDistributions = append(pagedDistributions, d)
+				} else {
+					pagedDistributions = append(pagedDistributions, &DistributionData{
+						TokenName:  tokenName,
+						RangeGroup: rangeGroup,
+						Count:      0,
+						Percent:    0,
+					})
+				}
+			}
+		}
+	} else {
+		// 保留既有行序：completeDistributions 按 SQL token_name 顺序追加缺失桶补 0。
+		completeDistributions := make([]*DistributionData, 0, len(distributions)+len(tokenNames)*len(rangeGroups))
+		existingKey := make(map[string]bool, len(distributions))
+		for _, d := range distributions {
+			key := d.TokenName + "|" + d.RangeGroup
+			existingKey[key] = true
+			completeDistributions = append(completeDistributions, d)
+		}
+		for _, tokenName := range tokenNames {
+			for _, rangeGroup := range rangeGroups {
+				key := tokenName + "|" + rangeGroup
+				if !existingKey[key] {
+					completeDistributions = append(completeDistributions, &DistributionData{
+						TokenName:  tokenName,
+						RangeGroup: rangeGroup,
+						Count:      0,
+						Percent:    0,
+					})
+				}
+			}
+		}
+		pageTokenSet := make(map[string]bool, len(pageTokenNames))
+		for _, name := range pageTokenNames {
+			pageTokenSet[name] = true
+		}
+		for _, d := range completeDistributions {
+			if pageTokenSet[d.TokenName] {
+				pagedDistributions = append(pagedDistributions, d)
+			}
 		}
 	}
 
@@ -174,20 +207,11 @@ func GetPromptTokensDistribution(startDate, endDate string, tokenIds string, mod
 	query := LOG_DB.Table("logs").Select(`
 		` + groupByExpr + ` as token_name,
 		CASE
-			WHEN prompt_tokens < 1000 THEN '0-1k'
-			WHEN prompt_tokens < 2000 THEN '1-2k'
-			WHEN prompt_tokens < 3000 THEN '2-3k'
-			WHEN prompt_tokens < 4000 THEN '3-4k'
-			WHEN prompt_tokens < 5000 THEN '4-5k'
-			WHEN prompt_tokens < 6000 THEN '5-6k'
-			WHEN prompt_tokens < 7000 THEN '6-7k'
-			WHEN prompt_tokens < 8000 THEN '7-8k'
-			WHEN prompt_tokens < 9000 THEN '8-9k'
-			WHEN prompt_tokens < 10000 THEN '9-10k'
-			WHEN prompt_tokens < 15000 THEN '10-15k'
-			WHEN prompt_tokens < 20000 THEN '15-20k'
+			WHEN prompt_tokens < 10000 THEN '0-10k'
+			WHEN prompt_tokens < 20000 THEN '10-20k'
 			WHEN prompt_tokens < 30000 THEN '20-30k'
-			WHEN prompt_tokens < 50000 THEN '30-50k'
+			WHEN prompt_tokens < 40000 THEN '30-40k'
+			WHEN prompt_tokens < 50000 THEN '40-50k'
 			WHEN prompt_tokens < 60000 THEN '50-60k'
 			WHEN prompt_tokens < 70000 THEN '60-70k'
 			WHEN prompt_tokens < 80000 THEN '70-80k'
@@ -206,7 +230,7 @@ func GetPromptTokensDistribution(startDate, endDate string, tokenIds string, mod
 		return nil, []string{}, 0, nil, err
 	}
 
-	paged, groups, total, summary := completeAndPageDistribution(distributions, distributionRangeGroupsPrompt, page, pageSize)
+	paged, groups, total, summary := completeAndPageDistribution(distributions, distributionRangeGroupsPrompt, page, pageSize, true)
 	return paged, groups, total, summary, nil
 }
 
@@ -243,7 +267,7 @@ func GetCompletionTokensDistribution(startDate, endDate string, tokenIds string,
 		return nil, []string{}, 0, nil, err
 	}
 
-	paged, groups, total, summary := completeAndPageDistribution(distributions, distributionRangeGroupsCompletion, page, pageSize)
+	paged, groups, total, summary := completeAndPageDistribution(distributions, distributionRangeGroupsCompletion, page, pageSize, true)
 	return paged, groups, total, summary, nil
 }
 
@@ -287,6 +311,6 @@ func GetRequestCountDistribution(startDate, endDate string, tokenIds string, mod
 		return nil, []string{}, 0, nil, err
 	}
 
-	paged, groups, total, summary := completeAndPageDistribution(distributions, distributionRangeGroupsRequestCount, page, pageSize)
+	paged, groups, total, summary := completeAndPageDistribution(distributions, distributionRangeGroupsRequestCount, page, pageSize, false)
 	return paged, groups, total, summary, nil
 }

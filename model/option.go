@@ -49,6 +49,7 @@ func InitOptionMap() {
 	common.OptionMap["AutomaticEnableChannelEnabled"] = strconv.FormatBool(common.AutomaticEnableChannelEnabled)
 	common.OptionMap["LogConsumeEnabled"] = strconv.FormatBool(common.LogConsumeEnabled)
 	common.OptionMap["LogUserInputEnabled"] = strconv.FormatBool(common.LogUserInputEnabled)
+	common.OptionMap["StatsExcludedTokenIds"] = common.StatsExcludedTokenIds
 	common.OptionMap["DisplayInCurrencyEnabled"] = strconv.FormatBool(common.DisplayInCurrencyEnabled)
 	common.OptionMap["DisplayTokenStatEnabled"] = strconv.FormatBool(common.DisplayTokenStatEnabled)
 	common.OptionMap["DrawingEnabled"] = strconv.FormatBool(common.DrawingEnabled)
@@ -372,6 +373,8 @@ func updateOptionMap(key string, value string) (err error) {
 	switch key {
 	case "EmailDomainWhitelist":
 		common.EmailDomainWhitelist = strings.Split(value, ",")
+	case "StatsExcludedTokenIds":
+		common.StatsExcludedTokenIds = value
 	case "SMTPServer":
 		common.SMTPServer = value
 	case "SMTPPort":

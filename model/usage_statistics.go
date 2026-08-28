@@ -2,10 +2,12 @@ package model
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"gorm.io/gorm"
 )
 
 // parseTimestamp 解析 "2006-01-02 15:04:05" 格式的时间字符串为 Unix 时间戳
@@ -77,6 +79,7 @@ func GetUsageStatistics(startDate, endDate string, tokenId int, modelName string
 	if modelName != "" {
 		query = query.Where("model_name LIKE ?", "%"+modelName+"%")
 	}
+	query = applyStatsExclusionGorm(query, "")
 
 	err := query.Count(&total).Error
 	if err != nil {
@@ -120,6 +123,7 @@ func GetMonthlyUsageStatistics(startDate, endDate string, tokenId int, modelName
 		conditions += " AND model_name LIKE ?"
 		params = append(params, "%"+modelName+"%")
 	}
+	conditions, params = appendStatsExclusionCondition(conditions, "token_id", params)
 
 	sql := `
 		SELECT
@@ -296,6 +300,7 @@ func GetUsageStatisticsSummary(startDate, endDate string, tokenId int, modelName
 	if modelName != "" {
 		query = query.Where("model_name LIKE ?", "%"+modelName+"%")
 	}
+	query = applyStatsExclusionGorm(query, "")
 
 	var result struct {
 		TotalRequests      int64   `json:"total_requests"`
@@ -358,6 +363,7 @@ func GetMonthlyUsageStatisticsSummary(startDate, endDate string, tokenId int, mo
 		conditions += " AND model_name LIKE ?"
 		params = append(params, "%"+modelName+"%")
 	}
+	conditions, params = appendStatsExclusionCondition(conditions, "token_id", params)
 
 	sql := `
 		SELECT
@@ -423,6 +429,7 @@ func GetUserUsageStatistics(userId int, startDate, endDate string, tokenId int, 
 	if modelName != "" {
 		query = query.Where("usage_statistics.model_name LIKE ?", "%"+modelName+"%")
 	}
+	query = applyStatsExclusionGorm(query, "usage_statistics")
 
 	err := query.Count(&total).Error
 	if err != nil {
@@ -462,6 +469,7 @@ func GetUserMonthlyUsageStatistics(userId int, startDate, endDate string, tokenI
 		conditions += " AND u.model_name LIKE ?"
 		params = append(params, "%"+modelName+"%")
 	}
+	conditions, params = appendStatsExclusionCondition(conditions, "u.token_id", params)
 
 	sql := `
 		SELECT
@@ -531,6 +539,7 @@ func GetUserUsageStatisticsSummary(userId int, startDate, endDate string, tokenI
 	if modelName != "" {
 		query = query.Where("usage_statistics.model_name LIKE ?", "%"+modelName+"%")
 	}
+	query = applyStatsExclusionGorm(query, "usage_statistics")
 	var result struct {
 		TotalRequests      int64 `json:"total_requests"`
 		SuccessfulRequests int64 `json:"successful_requests"`
@@ -593,6 +602,7 @@ func GetUserMonthlyUsageStatisticsSummary(userId int, startDate, endDate string,
 		conditions += " AND u.model_name LIKE ?"
 		params = append(params, "%"+modelName+"%")
 	}
+	conditions, params = appendStatsExclusionCondition(conditions, "u.token_id", params)
 	sql := `
 		SELECT
 			COALESCE(SUM(u.total_requests), 0) as total_requests,
@@ -656,4 +666,55 @@ func splitTokenIds(tokenIds string) []string {
 		}
 	}
 	return result
+}
+
+// statsExcludedTokenIds 返回全局配置的统计排除 token id 列表（已去重、仅保留正整数）。
+// 空列表表示不排除任何令牌。所有统计查询（日/月/排序/分布）都会排除这些 token。
+func statsExcludedTokenIds() []int {
+	raw := common.StatsExcludedTokenIds
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	seen := make(map[int]bool, len(parts))
+	result := make([]int, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		id, err := strconv.Atoi(p)
+		if err != nil || id <= 0 || seen[id] {
+			continue
+		}
+		seen[id] = true
+		result = append(result, id)
+	}
+	return result
+}
+
+// applyStatsExclusionGorm 给 GORM 查询附加全局统计排除条件：
+//  - token_id NOT IN (配置的排除令牌)
+func applyStatsExclusionGorm(query *gorm.DB, tablePrefix string) *gorm.DB {
+	tokenCol := "token_id"
+	if tablePrefix != "" {
+		tokenCol = tablePrefix + ".token_id"
+	}
+	ids := statsExcludedTokenIds()
+	if len(ids) > 0 {
+		query = query.Where(tokenCol+" NOT IN ?", ids)
+	}
+	return query
+}
+
+// appendStatsExclusionCondition 给原生 SQL 的 conditions 片段追加全局统计排除条件：
+//  - tokenCol NOT IN (配置的排除令牌)
+// tokenCol 为完整列名（可含表前缀，如 "u.token_id"），params 为该查询的参数切片。
+func appendStatsExclusionCondition(conditions, tokenCol string, params []interface{}) (string, []interface{}) {
+	ids := statsExcludedTokenIds()
+	if len(ids) > 0 {
+		conditions += " AND " + tokenCol + " NOT IN (?)"
+		params = append(params, ids)
+	}
+	return conditions, params
 }
