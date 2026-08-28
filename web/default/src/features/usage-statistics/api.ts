@@ -174,13 +174,26 @@ export async function exportStatsCsv(
 
 // 拉取 token 列表用于筛选下拉。/api/token/ 自动按当前用户过滤
 // （管理员看全部，普通用户看自己的），key 为掩码——下拉只取 id/name。
+// 后端 page_size 截断到 100，这里分页循环拉全量，确保 embed/rerank 等
+// 排在 100 之后的令牌也能出现在排除/筛选下拉里。
 export type StatsTokenOption = { id: number; name: string }
 
 export async function getStatsTokens(): Promise<StatsTokenOption[]> {
-  const res = await api.get('/api/token/', { params: { p: 1, size: 100 } })
-  const items = res.data?.data?.items ?? []
-  return (items as Array<{ id: number; name: string }>).map((t) => ({
-    id: t.id,
-    name: t.name,
-  }))
+  const pageSize = 100
+  const result: StatsTokenOption[] = []
+  let page = 1
+  // 上限 50 页（5000 个令牌），防止异常无限循环
+  while (page <= 50) {
+    const res = await api.get('/api/token/', { params: { p: page, size: pageSize } })
+    const items = (res.data?.data?.items ?? []) as Array<{
+      id: number
+      name: string
+    }>
+    for (const t of items) {
+      result.push({ id: t.id, name: t.name })
+    }
+    if (items.length < pageSize) break
+    page += 1
+  }
+  return result
 }

@@ -44,10 +44,22 @@ function parseIds(raw: string): string[] {
 
 type StatsTokenItem = { id: number; name: string }
 
+// 后端 page_size 截断到 100，分页循环拉全量，确保排在 100 之后的令牌
+// （如 embed/rerank）也能在排除下拉里出现。
 async function fetchTokens(): Promise<StatsTokenItem[]> {
-  const res = await api.get('/api/token/', { params: { p: 1, size: 100 } })
-  const items = (res.data?.data?.items ?? []) as StatsTokenItem[]
-  return items
+  const pageSize = 100
+  const result: StatsTokenItem[] = []
+  let page = 1
+  while (page <= 50) {
+    const res = await api.get('/api/token/', {
+      params: { p: page, size: pageSize },
+    })
+    const items = (res.data?.data?.items ?? []) as StatsTokenItem[]
+    result.push(...items)
+    if (items.length < pageSize) break
+    page += 1
+  }
+  return result
 }
 
 type StatsSettingsSectionProps = {
