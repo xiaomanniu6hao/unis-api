@@ -95,6 +95,9 @@ export function DistributionTable({
         {
           start_date: appliedFilters.startDate,
           end_date: appliedFilters.endDate,
+          token_ids: appliedFilters.tokenId
+            ? String(appliedFilters.tokenId)
+            : undefined,
           model_name: appliedFilters.modelName || undefined,
           group_by: appliedFilters.groupBy,
           p: page,
@@ -157,6 +160,9 @@ export function DistributionTable({
         {
           start_date: appliedFilters.startDate,
           end_date: appliedFilters.endDate,
+          token_ids: appliedFilters.tokenId
+            ? String(appliedFilters.tokenId)
+            : undefined,
           model_name: appliedFilters.modelName || undefined,
           group_by: appliedFilters.groupBy,
         },
@@ -187,7 +193,6 @@ export function DistributionTable({
             onExport={handleExport}
             tokens={tokensQuery.data ?? []}
             showGroupBy
-            showTokenFilter={false}
             showPercentToggle
             percent={showPercent}
             onTogglePercent={setShowPercent}

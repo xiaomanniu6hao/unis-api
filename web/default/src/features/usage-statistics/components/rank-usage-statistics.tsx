@@ -85,6 +85,9 @@ export function RankUsageStatistics() {
         {
           start_date: appliedFilters.startDate,
           end_date: appliedFilters.endDate,
+          token_ids: appliedFilters.tokenId
+            ? String(appliedFilters.tokenId)
+            : undefined,
           model_name: appliedFilters.modelName || undefined,
           group_by: appliedFilters.groupBy,
           p: page,
@@ -125,6 +128,9 @@ export function RankUsageStatistics() {
         {
           start_date: appliedFilters.startDate,
           end_date: appliedFilters.endDate,
+          token_ids: appliedFilters.tokenId
+            ? String(appliedFilters.tokenId)
+            : undefined,
           model_name: appliedFilters.modelName || undefined,
           group_by: appliedFilters.groupBy,
         },
@@ -149,7 +155,6 @@ export function RankUsageStatistics() {
             onExport={handleExport}
             tokens={tokensQuery.data ?? []}
             showGroupBy
-            showTokenFilter={false}
           />
 
           <StatsSummaryCards summary={summary} />
