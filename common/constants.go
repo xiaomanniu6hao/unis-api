@@ -247,8 +247,9 @@ var (
 	DownloadRateLimitDuration int64 = 60
 
 	// Per-user search rate limit (applies after authentication, keyed by user ID)
+	// 30/min 以支撑“输入即搜索”的交互：10/min 下仅在密钥页边敲边搜就会被打断
 	SearchRateLimitEnable         = true
-	SearchRateLimitNum            = 10
+	SearchRateLimitNum            = 30
 	SearchRateLimitDuration int64 = 60
 )
 

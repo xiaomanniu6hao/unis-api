@@ -293,6 +293,7 @@ export function ApiKeysTable() {
       applyHeaderSize
       toolbarProps={{
         searchPlaceholder: t('Filter by name...'),
+        searchDebounceMs: 400,
         additionalSearch: (
           <Input
             placeholder={t('Filter by API key...')}

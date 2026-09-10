@@ -111,7 +111,7 @@ func CountAllTokens() (int64, error) {
 //  2. 连续的 % 合并为单个 %
 //  3. 最多允许 2 个 %
 //  4. 含 % 时（模糊搜索），去掉 % 后关键词长度必须 >= 2
-//  5. 不含 % 时按精确匹配
+//  5. 不含 % 时按子串包含匹配（自动模糊，等价于 %keyword%）
 func sanitizeLikePattern(input string) (string, error) {
 	// 1. 先转义 ESCAPE 字符 ! 自身，再转义 _
 	//    使用 ! 而非 \ 作为 ESCAPE 字符，避免 MySQL 中反斜杠的字符串转义问题
@@ -122,7 +122,10 @@ func sanitizeLikePattern(input string) (string, error) {
 		return "", err
 	}
 
-	// 5. 无 % 时，精确全匹配
+	// 5. 无 % 时按子串包含匹配，用户无需手写 % 通配符即可模糊检索
+	if !strings.Contains(input, "%") {
+		return "%" + input + "%", nil
+	}
 	return input, nil
 }
 
