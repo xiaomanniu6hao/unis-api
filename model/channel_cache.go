@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -268,21 +269,57 @@ func CacheUpdateChannelStatus(id int, status int) {
 	}
 	channelSyncLock.Lock()
 	defer channelSyncLock.Unlock()
-	if channel, ok := channelsIDM[id]; ok {
-		channel.Status = status
+	channel, ok := channelsIDM[id]
+	if !ok {
+		return
 	}
-	if status != common.ChannelStatusEnabled {
-		// delete the channel from group2model2channels
-		for group, model2channels := range group2model2channels {
-			for model, channels := range model2channels {
-				for i, channelId := range channels {
-					if channelId == id {
-						// remove the channel from the slice
-						group2model2channels[group][model] = append(channels[:i], channels[i+1:]...)
-						break
-					}
+	channel.Status = status
+	// if status is enabled, re-add the channel to the selection pool immediately,
+	// so it can take traffic without waiting for the next full cache sync
+	if status == common.ChannelStatusEnabled {
+		addChannelToGroup2Model2Channels(channel)
+		return
+	}
+	// delete the channel from group2model2channels
+	for group, model2channels := range group2model2channels {
+		for model, channels := range model2channels {
+			for i, channelId := range channels {
+				if channelId == id {
+					// remove the channel from the slice
+					group2model2channels[group][model] = append(channels[:i], channels[i+1:]...)
+					break
 				}
 			}
+		}
+	}
+}
+
+// addChannelToGroup2Model2Channels inserts an enabled channel into the selection
+// pool keyed by (group, model), keeping each model's list sorted by descending
+// priority to match InitChannelCache layout. Caller must hold channelSyncLock.
+func addChannelToGroup2Model2Channels(channel *Channel) {
+	if group2model2channels == nil {
+		group2model2channels = make(map[string]map[string][]int)
+	}
+	for _, group := range strings.Split(channel.Group, ",") {
+		if group2model2channels[group] == nil {
+			group2model2channels[group] = make(map[string][]int)
+		}
+		for _, model := range strings.Split(channel.Models, ",") {
+			ids := group2model2channels[group][model]
+			if slices.Contains(ids, channel.Id) {
+				continue
+			}
+			ids = append(ids, channel.Id)
+			sort.Slice(ids, func(i, j int) bool {
+				ci, iok := channelsIDM[ids[i]]
+				cj, jok := channelsIDM[ids[j]]
+				if !iok || !jok {
+					return ids[i] < ids[j]
+				}
+				return ci.GetPriority() > cj.GetPriority()
+			})
+			group2model2channels[group][model] = ids
 		}
 	}
 }
