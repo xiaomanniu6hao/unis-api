@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/QuantumNous/new-api/common"
@@ -15,6 +17,33 @@ var ModelRequestRateLimitCount = 0
 var ModelRequestRateLimitSuccessCount = 1000
 var ModelRequestRateLimitGroup = map[string][2]int{}
 var ModelRequestRateLimitMutex sync.RWMutex
+
+// TokenConcurrentLimit 限制每个API密钥（令牌）同时进行中的请求数，
+// 高峰期可通过后台开关临时启用，超出上限的请求直接返回 429。
+var TokenConcurrentLimitEnabled = false
+var TokenConcurrentLimitMaxCount = 2
+
+// TokenConcurrentLimitExcludedTokenIds 并发限制排除的令牌 ID 列表（逗号分隔），
+// 公共令牌（如 rerank、embed、lobehub 共享 key）填入后不受并发限制。
+var TokenConcurrentLimitExcludedTokenIds = ""
+
+// IsTokenConcurrentLimitExcluded 判断令牌是否在并发限制排除列表中。
+func IsTokenConcurrentLimitExcluded(tokenId int) bool {
+	if tokenId <= 0 || TokenConcurrentLimitExcludedTokenIds == "" {
+		return false
+	}
+	for _, part := range strings.Split(TokenConcurrentLimitExcludedTokenIds, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		id, err := strconv.Atoi(part)
+		if err == nil && id == tokenId {
+			return true
+		}
+	}
+	return false
+}
 
 func ModelRequestRateLimitGroup2JSONString() string {
 	ModelRequestRateLimitMutex.RLock()

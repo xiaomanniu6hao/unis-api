@@ -169,6 +169,9 @@ func InitOptionMap() {
 	common.OptionMap["DemoSiteEnabled"] = strconv.FormatBool(operation_setting.DemoSiteEnabled)
 	common.OptionMap["SelfUseModeEnabled"] = strconv.FormatBool(operation_setting.SelfUseModeEnabled)
 	common.OptionMap["ModelRequestRateLimitEnabled"] = strconv.FormatBool(setting.ModelRequestRateLimitEnabled)
+	common.OptionMap["TokenConcurrentLimitEnabled"] = strconv.FormatBool(setting.TokenConcurrentLimitEnabled)
+	common.OptionMap["TokenConcurrentLimitMaxCount"] = strconv.Itoa(setting.TokenConcurrentLimitMaxCount)
+	common.OptionMap["TokenConcurrentLimitExcludedTokenIds"] = setting.TokenConcurrentLimitExcludedTokenIds
 	common.OptionMap["CheckSensitiveOnPromptEnabled"] = strconv.FormatBool(setting.CheckSensitiveOnPromptEnabled)
 	common.OptionMap["StopOnSensitiveEnabled"] = strconv.FormatBool(setting.StopOnSensitiveEnabled)
 	common.OptionMap["SensitiveWords"] = setting.SensitiveWordsToString()
@@ -352,6 +355,8 @@ func updateOptionMap(key string, value string) (err error) {
 			setting.CheckSensitiveOnPromptEnabled = boolValue
 		case "ModelRequestRateLimitEnabled":
 			setting.ModelRequestRateLimitEnabled = boolValue
+		case "TokenConcurrentLimitEnabled":
+			setting.TokenConcurrentLimitEnabled = boolValue
 		case "StopOnSensitiveEnabled":
 			setting.StopOnSensitiveEnabled = boolValue
 		case "SMTPSSLEnabled":
@@ -375,6 +380,8 @@ func updateOptionMap(key string, value string) (err error) {
 		common.EmailDomainWhitelist = strings.Split(value, ",")
 	case "StatsExcludedTokenIds":
 		common.StatsExcludedTokenIds = value
+	case "TokenConcurrentLimitExcludedTokenIds":
+		setting.TokenConcurrentLimitExcludedTokenIds = value
 	case "SMTPServer":
 		common.SMTPServer = value
 	case "SMTPPort":
@@ -522,6 +529,8 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.ModelRequestRateLimitDurationMinutes, _ = strconv.Atoi(value)
 	case "ModelRequestRateLimitSuccessCount":
 		setting.ModelRequestRateLimitSuccessCount, _ = strconv.Atoi(value)
+	case "TokenConcurrentLimitMaxCount":
+		setting.TokenConcurrentLimitMaxCount, _ = strconv.Atoi(value)
 	case "ModelRequestRateLimitGroup":
 		err = setting.UpdateModelRequestRateLimitGroupByJSONString(value)
 	case "RetryTimes":

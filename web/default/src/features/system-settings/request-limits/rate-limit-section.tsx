@@ -18,11 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Code2, Palette } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 import * as z from 'zod'
 
+import { MultiSelect, type Option } from '@/components/multi-select'
 import { Button } from '@/components/ui/button'
 import {
   Form,
@@ -44,6 +45,11 @@ import {
 } from '../components/settings-form-layout'
 import { SettingsPageFormActions } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
+import {
+  parseTokenIds,
+  useAllTokens,
+  type TokenItem,
+} from '../hooks/use-all-tokens'
 import { useUpdateOption } from '../hooks/use-update-option'
 import { RateLimitVisualEditor } from './rate-limit-visual-editor'
 
@@ -78,18 +84,38 @@ const createRateLimitSchema = (t: (key: string) => string) =>
       .refine(isValidJSON, {
         message: t('Invalid JSON format or values out of allowed range'),
       }),
+    TokenConcurrentLimitEnabled: z.boolean(),
+    TokenConcurrentLimitMaxCount: z.number().min(1).max(1000),
   })
 
 type RateLimitFormValues = z.infer<ReturnType<typeof createRateLimitSchema>>
 
 type RateLimitSectionProps = {
   defaultValues: RateLimitFormValues
+  defaultExcludedTokenIds: string
 }
 
-export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
+export function RateLimitSection({
+  defaultValues,
+  defaultExcludedTokenIds,
+}: RateLimitSectionProps) {
   const { t } = useTranslation()
   const updateOption = useUpdateOption()
   const [useVisualEditor, setUseVisualEditor] = useState(true)
+  const [excludedTokenIds, setExcludedTokenIds] = useState<string[]>(() =>
+    parseTokenIds(defaultExcludedTokenIds)
+  )
+
+  const tokensQuery = useAllTokens()
+
+  const tokenOptions: Option[] = useMemo(
+    () =>
+      (tokensQuery.data ?? []).map((token: TokenItem) => ({
+        value: String(token.id),
+        label: token.name || `#${token.id}`,
+      })),
+    [tokensQuery.data]
+  )
 
   const rateLimitSchema = createRateLimitSchema(t)
 
@@ -103,6 +129,10 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
     form.reset(defaultValues)
   }, [defaultValues, form])
 
+  useEffect(() => {
+    setExcludedTokenIds(parseTokenIds(defaultExcludedTokenIds))
+  }, [defaultExcludedTokenIds])
+
   const onSubmit = async (values: RateLimitFormValues) => {
     const updates = Object.entries(values).filter(
       ([key, value]) =>
@@ -112,6 +142,11 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
     for (const [key, value] of updates) {
       await updateOption.mutateAsync({ key, value: value ?? '' })
     }
+
+    await updateOption.mutateAsync({
+      key: 'TokenConcurrentLimitExcludedTokenIds',
+      value: excludedTokenIds.join(','),
+    })
   }
 
   return (
@@ -237,6 +272,81 @@ export function RateLimitSection({ defaultValues }: RateLimitSectionProps) {
                   <FormMessage />
                 </FormItem>
               )}
+            />
+          </div>
+
+          <FormField
+            control={form.control}
+            name='TokenConcurrentLimitEnabled'
+            render={({ field }) => (
+              <SettingsSwitchItem>
+                <SettingsSwitchContent>
+                  <FormLabel>{t('Enable per-token concurrency limit')}</FormLabel>
+                  <FormDescription>
+                    {t(
+                      'Limits how many requests each API key can process at the same time'
+                    )}
+                  </FormDescription>
+                </SettingsSwitchContent>
+                <FormControl>
+                  <Switch
+                    checked={field.value}
+                    onCheckedChange={field.onChange}
+                  />
+                </FormControl>
+              </SettingsSwitchItem>
+            )}
+          />
+
+          <div className='grid gap-4 md:grid-cols-3'>
+            <FormField
+              control={form.control}
+              name='TokenConcurrentLimitMaxCount'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Max concurrent requests')}</FormLabel>
+                  <FormControl>
+                    <div className='flex items-center gap-2'>
+                      <Input
+                        type='number'
+                        min={1}
+                        max={1000}
+                        step={1}
+                        {...field}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value) || 1)
+                        }
+                      />
+                      <span className='text-muted-foreground text-sm'>
+                        {t('times')}
+                      </span>
+                    </div>
+                  </FormControl>
+                  <FormDescription>
+                    {t('Maximum simultaneous in-flight requests per API key')}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+
+          <div className='flex min-w-0 flex-col gap-1.5'>
+            <label className='text-sm font-medium'>
+              {t('Concurrency limit excluded tokens')}
+            </label>
+            <p className='text-muted-foreground text-xs'>
+              {t(
+                'Selected tokens are not subject to the per-token concurrency limit, e.g. public shared keys'
+              )}
+            </p>
+            <MultiSelect
+              options={tokenOptions}
+              selected={excludedTokenIds}
+              onChange={setExcludedTokenIds}
+              placeholder={t('Select tokens to exclude...')}
+              className='w-full'
+              maxVisibleChips={10}
             />
           </div>
 

@@ -16,51 +16,20 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 
 For commercial licensing, please contact support@quantumnous.com
 */
-import { useQuery } from '@tanstack/react-query'
 import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { MultiSelect, type Option } from '@/components/multi-select'
-import { api } from '@/lib/api'
 
 import { SettingsForm } from '../components/settings-form-layout'
 import { SettingsPageFormActions } from '../components/settings-page-context'
 import { SettingsSection } from '../components/settings-section'
+import {
+  parseTokenIds,
+  useAllTokens,
+  type TokenItem,
+} from '../hooks/use-all-tokens'
 import { useUpdateOption } from '../hooks/use-update-option'
-
-// 把逗号分隔的 id 字符串拆成去重的 id 字符串数组
-function parseIds(raw: string): string[] {
-  if (!raw) return []
-  const seen = new Set<string>()
-  const result: string[] = []
-  for (const part of raw.split(',')) {
-    const id = part.trim()
-    if (!id || seen.has(id)) continue
-    seen.add(id)
-    result.push(id)
-  }
-  return result
-}
-
-type StatsTokenItem = { id: number; name: string }
-
-// 后端 page_size 截断到 100，分页循环拉全量，确保排在 100 之后的令牌
-// （如 embed/rerank）也能在排除下拉里出现。
-async function fetchTokens(): Promise<StatsTokenItem[]> {
-  const pageSize = 100
-  const result: StatsTokenItem[] = []
-  let page = 1
-  while (page <= 50) {
-    const res = await api.get('/api/token/', {
-      params: { p: page, size: pageSize },
-    })
-    const items = (res.data?.data?.items ?? []) as StatsTokenItem[]
-    result.push(...items)
-    if (items.length < pageSize) break
-    page += 1
-  }
-  return result
-}
 
 type StatsSettingsSectionProps = {
   defaultExcludedTokenIds: string
@@ -73,18 +42,14 @@ export function StatsSettingsSection({
   const updateOption = useUpdateOption()
 
   const [selected, setSelected] = useState<string[]>(() =>
-    parseIds(defaultExcludedTokenIds)
+    parseTokenIds(defaultExcludedTokenIds)
   )
 
-  const tokensQuery = useQuery({
-    queryKey: ['stats-settings-tokens'],
-    queryFn: fetchTokens,
-    staleTime: 5 * 60 * 1000,
-  })
+  const tokensQuery = useAllTokens()
 
   const options: Option[] = useMemo(
     () =>
-      (tokensQuery.data ?? []).map((token) => ({
+      (tokensQuery.data ?? []).map((token: TokenItem) => ({
         value: String(token.id),
         label: token.name || `#${token.id}`,
       })),
@@ -92,7 +57,7 @@ export function StatsSettingsSection({
   )
 
   const initialSet = useMemo(
-    () => new Set(parseIds(defaultExcludedTokenIds)),
+    () => new Set(parseTokenIds(defaultExcludedTokenIds)),
     [defaultExcludedTokenIds]
   )
   const dirty = useMemo(() => {
@@ -106,7 +71,7 @@ export function StatsSettingsSection({
   }
 
   const handleReset = () => {
-    setSelected(parseIds(defaultExcludedTokenIds))
+    setSelected(parseTokenIds(defaultExcludedTokenIds))
   }
 
   return (

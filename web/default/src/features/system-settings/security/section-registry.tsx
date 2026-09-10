@@ -37,7 +37,12 @@ const SECURITY_SECTIONS = [
           ModelRequestRateLimitDurationMinutes:
             settings.ModelRequestRateLimitDurationMinutes,
           ModelRequestRateLimitGroup: settings.ModelRequestRateLimitGroup,
+          TokenConcurrentLimitEnabled: settings.TokenConcurrentLimitEnabled,
+          TokenConcurrentLimitMaxCount: settings.TokenConcurrentLimitMaxCount,
         }}
+        defaultExcludedTokenIds={
+          settings.TokenConcurrentLimitExcludedTokenIds ?? ''
+        }
       />
     ),
   },
