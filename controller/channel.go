@@ -594,6 +594,15 @@ func getVertexArrayKeys(keys string) ([]string, error) {
 	return cleanKeys, nil
 }
 
+// clearChannelAffinityAfterRoutingChange resets session→channel affinity entries
+// so weight/priority edits, newly added channels, and re-enabled channels
+// rebalance immediately instead of waiting out the affinity TTL.
+func clearChannelAffinityAfterRoutingChange() {
+	if n := service.ClearChannelAffinityCacheAll(); n > 0 {
+		common.SysLog(fmt.Sprintf("channel affinity cache cleared after routing change, entries=%d", n))
+	}
+}
+
 func AddChannel(c *gin.Context) {
 	addChannelRequest := AddChannelRequest{}
 	err := c.ShouldBindJSON(&addChannelRequest)
@@ -686,7 +695,9 @@ func AddChannel(c *gin.Context) {
 		common.ApiError(c, err)
 		return
 	}
+	model.InitChannelCache()
 	service.ResetProxyClientCache()
+	clearChannelAffinityAfterRoutingChange()
 	recordManageAudit(c, "channel.create", map[string]interface{}{
 		"name":  addChannelRequest.Channel.Name,
 		"type":  addChannelRequest.Channel.Type,
@@ -795,6 +806,7 @@ func EnableTagChannels(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	clearChannelAffinityAfterRoutingChange()
 	recordManageAudit(c, "channel.tag_enable", map[string]interface{}{
 		"tag": channelTag.Tag,
 	})
@@ -855,6 +867,9 @@ func EditTagChannels(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	if channelTag.Priority != nil || channelTag.Weight != nil || channelTag.Models != nil || channelTag.Groups != nil {
+		clearChannelAffinityAfterRoutingChange()
+	}
 	recordManageAudit(c, "channel.tag_edit", map[string]interface{}{
 		"tag": channelTag.Tag,
 	})
@@ -1053,6 +1068,11 @@ func UpdateChannel(c *gin.Context) {
 	}
 	model.InitChannelCache()
 	service.ResetProxyClientCache()
+	if channel.Models != originChannel.Models || channel.Group != originChannel.Group ||
+		channel.GetPriority() != originChannel.GetPriority() || channel.GetWeight() != originChannel.GetWeight() ||
+		(channel.Status == common.ChannelStatusEnabled && channel.Status != originChannel.Status) {
+		clearChannelAffinityAfterRoutingChange()
+	}
 	// 记录变更的字段名（语言无关的字段标识），密钥仅记录"已更换"绝不记录内容。
 	changedFields := make([]string, 0)
 	if channel.Models != originChannel.Models {
@@ -1100,6 +1120,9 @@ func UpdateChannelStatus(c *gin.Context) {
 	if changed {
 		model.InitChannelCache()
 		service.ResetProxyClientCache()
+		if req.Status == common.ChannelStatusEnabled {
+			clearChannelAffinityAfterRoutingChange()
+		}
 	}
 	recordManageAudit(c, "channel.status_update", map[string]interface{}{
 		"id":      id,
@@ -1128,6 +1151,9 @@ func BatchUpdateChannelStatus(c *gin.Context) {
 	if changedCount > 0 {
 		model.InitChannelCache()
 		service.ResetProxyClientCache()
+		if req.Status == common.ChannelStatusEnabled {
+			clearChannelAffinityAfterRoutingChange()
+		}
 	}
 	recordManageAudit(c, "channel.status_update_batch", map[string]interface{}{
 		"count":  changedCount,
@@ -1392,6 +1418,7 @@ func CopyChannel(c *gin.Context) {
 		return
 	}
 	model.InitChannelCache()
+	clearChannelAffinityAfterRoutingChange()
 	recordManageAudit(c, "channel.copy", map[string]interface{}{
 		"sourceId": id,
 		"id":       clone.Id,

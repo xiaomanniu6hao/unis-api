@@ -79,7 +79,10 @@ var channelAffinitySetting = ChannelAffinitySetting{
 	SwitchOnSuccess:       true,
 	KeepOnChannelDisabled: false,
 	MaxEntries:            100_000,
-	DefaultTTLSeconds:     3600,
+	// TTL 保持 1 小时以维持单次 CLI 会话的链路连续。负载再平衡不靠缩短 TTL：
+	// 改权重/优先级、新增/复制渠道时由 controller 主动清空亲和缓存使新配比立即生效。
+	// 仍可用 CHANNEL_AFFINITY_SETTING 覆盖。
+	DefaultTTLSeconds: 3600,
 	Rules: []ChannelAffinityRule{
 		{
 			Name:       "codex cli trace",
