@@ -1,5 +1,12 @@
 # 定制化修改清单 (CUSTOMIZATIONS)
 
+> **2026-10-28 上游 rc.47 合并说明**：上游把 `web/default/`、`web/classic/` 合并到 `web/` 根目录，
+> 定制前端代码已同步迁移到 `web/src/`（原 `web/default/src/`）。同时上游新增本地子模块
+> `relaykit/`（dto、relayconvert、types）与 `tokenkit/`（token 估算），渠道选择重构为
+> `dto.ChannelFilter` / `dto.ChannelConstraints` + `service.SelectChannelForRequest`。
+> 本文档中的路径已按新结构更新。
+
+
 > 本文件是**人类可读的修改记录**，与 `.custom/patches/` 下的 git 补丁互为补充。
 > 每加一个功能，就在下面追加一节。升级时遇到冲突，先看这里定位"为什么改、改了哪里"。
 
@@ -14,14 +21,14 @@
 
 | 功能类型 | 涉及目录 | 注册入口 |
 |---|---|---|
-| 前端页面 | `web/default/src/features/<name>/` | 新建 feature + route 薄壳 |
-| 路由薄壳 | `web/default/src/routes/_authenticated/<name>/index.tsx` | 新建即可，`routeTree.gen.ts` 自动生成纳入 |
-| 侧边栏分区 | `web/default/src/hooks/use-sidebar-data.ts` | 在 sidebar 数据里加分区/项 |
-| 顶部导航 | `web/default/src/hooks/use-top-nav-links.ts` | 推送导航链接 |
-| 导航开关 | `web/default/src/features/system-settings/maintenance/config.ts` + `header-navigation-section.tsx` | 模块类型 + 默认值 + 开关 schema |
-| i18n 文案 | `web/default/src/i18n/locales/{en,zh}.json` | 尾部追加 key（官方常改易冲突，单独 commit） |
+| 前端页面 | `web/src/features/<name>/` | 新建 feature + route 薄壳 |
+| 路由薄壳 | `web/src/routes/_authenticated/<name>/index.tsx` | 新建即可，`routeTree.gen.ts` 自动生成纳入 |
+| 侧边栏分区 | `web/src/hooks/use-sidebar-data.ts` | 在 sidebar 数据里加分区/项 |
+| 顶部导航 | `web/src/hooks/use-top-nav-links.ts` | 推送导航链接 |
+| 导航开关 | `web/src/features/system-settings/maintenance/config.ts` + `header-navigation-section.tsx` | 模块类型 + 默认值 + 开关 schema |
+| i18n 文案 | `web/src/i18n/locales/{en,zh}.json` | 尾部追加 key（官方常改易冲突，单独 commit） |
 
-> 注意：`web/default/src/routeTree.gen.ts` 是 TanStack Router 自动生成（带 `@ts-nocheck`），
+> 注意：`web/src/routeTree.gen.ts` 是 TanStack Router 自动生成（带 `@ts-nocheck`），
 > dev/build 时自动纳入新路由，**无需手改、不要手动提交其变更以外的干扰**。
 
 ## 镜像备份约定（可选）
@@ -41,11 +48,11 @@
 - **日期**: YYYY-MM-DD
 - **目的**: 一句话说明为什么做、解决什么。
 - **新增文件**:
-  - `web/default/src/features/xxx/index.tsx`
-  - `web/default/src/routes/_authenticated/xxx/index.tsx`
+  - `web/src/features/xxx/index.tsx`
+  - `web/src/routes/_authenticated/xxx/index.tsx`
 - **修改的核心文件**:
-  - `web/default/src/hooks/use-sidebar-data.ts` — 注册侧边栏项（+N 行）
-  - `web/default/src/i18n/locales/en.json` + `zh.json` — 新 key（+N 行）
+  - `web/src/hooks/use-sidebar-data.ts` — 注册侧边栏项（+N 行）
+  - `web/src/i18n/locales/en.json` + `zh.json` — 新 key（+N 行）
 - **数据库**: 无（前端功能）/ 描述新表
 - **依赖**: 无 / 依赖功能 [M]
 - **回滚**: 删除新增文件 + 撤销核心文件对应行
@@ -93,15 +100,15 @@
 
 ### [5] /info 公开页 + token-info 明文端点 + 导航注册 + i18n
 - **Commit**: 0005
-- **新增**: `web/default/src/features/info/{api.ts,index.tsx}`, `web/default/src/routes/info/index.tsx`
+- **新增**: `web/src/features/info/{api.ts,index.tsx}`, `web/src/routes/info/index.tsx`
 - **核心文件**: `controller/token.go`(GetAllTokensPlaintext), `model/token.go`(GetAllTokens/CountAllTokens), `router/api-router.go`(token-info 组), `nav-modules.ts`+`use-top-nav-links.ts`+maintenance `config.ts`/`header-navigation-section.tsx`(导航开关), `i18n/locales/{en,zh}.json`(34 key)
 - **注意**: token 明文泄露为 /info 固有特性，由用户明确接受
 - **回滚**: 删新增文件 + 撤核心文件对应行
 
 ### [6] 6 个统计页前端（日/月/rank + 3 分布）+ 侧边栏分区
 - **Commit**: 0006
-- **新增**: `web/default/src/features/usage-statistics/`(api+index+6 components), 6 个 `routes/_authenticated/*/index.tsx` 薄壳
-- **核心文件**: `web/default/src/hooks/use-sidebar-data.ts` — Statistics 侧边栏分区(6 项)
+- **新增**: `web/src/features/usage-statistics/`(api+index+6 components), 6 个 `routes/_authenticated/*/index.tsx` 薄壳
+- **核心文件**: `web/src/hooks/use-sidebar-data.ts` — Statistics 侧边栏分区(6 项)
 - **依赖**: 后端 [3]+[4] 的 API 端点；i18n key 见 [5]
 - **注意**: `routeTree.gen.ts` 自动生成，无需手改
 - **回滚**: 删新增文件 + 撤 sidebar 分区
@@ -116,8 +123,8 @@
   - `service/channel_runtime_monitor.go` — 每 5s 抓取渠道 base_url 同源 `/metrics`，落库 Running/Waiting/max_batch，并按阈值上锁/解锁
   - `service/channel_length_routing.go` — 按 prompt tokens 阈值把请求约束到指定渠道
   - `controller/channel_runtime.go` — 状态/样本/上限/刷新/解锁/资源统计/渠道清单 7 个 API
-  - `web/default/src/features/dashboard/components/channels/` — 看板「渠道资源分析」（调用量 + 拥挤度）
-  - `web/default/src/features/system-settings/general/channel-runtime/` — 配置页
+  - `web/src/features/dashboard/components/channels/` — 看板「渠道资源分析」（调用量 + 拥挤度）
+  - `web/src/features/system-settings/general/channel-runtime/` — 配置页
   - `docs/channel-runtime-monitor.md` — 设计与排障文档
 - **核心文件**: `main.go`（启动采集器）、`model/main.go`（AutoMigrate）、`router/api-router.go`（`/api/channel_runtime/*` 路由组）、`middleware/distributor.go` + `service/channel_select.go` + `model/channel_cache.go` + `model/ability.go` + `constant/context_key.go`（长度路由约束）、`features/dashboard/{api.ts,index.tsx,section-registry.tsx}`、`features/system-settings/{types.ts,models/section-registry.tsx}`、`i18n/locales/zh.json`
 - **依赖**: vLLM 侧暴露 `vllm:num_requests_running/num_requests_waiting`；max_batch 优先级 渠道名手工配置 > `max_num_seqs` > 默认 4
@@ -137,9 +144,9 @@
 
 按冲突概率从高到低（升级时优先核对这些文件）：
 
-1. **`web/default/src/i18n/locales/en.json` / `zh.json`** — 官方常加 key，尾部追加易冲突
-2. **`web/default/src/hooks/use-sidebar-data.ts`** — 官方可能调整侧边栏结构
-3. **`web/default/src/hooks/use-top-nav-links.ts`** — 导航结构官方可能改
-4. **`web/default/src/features/system-settings/maintenance/`** — 维护设置结构官方可能改
+1. **`web/src/i18n/locales/en.json` / `zh.json`** — 官方常加 key，尾部追加易冲突
+2. **`web/src/hooks/use-sidebar-data.ts`** — 官方可能调整侧边栏结构
+3. **`web/src/hooks/use-top-nav-links.ts`** — 导航结构官方可能改
+4. **`web/src/features/system-settings/maintenance/`** — 维护设置结构官方可能改
 
 新增文件（features / routes / components）**零冲突**，升级时直接保留。
