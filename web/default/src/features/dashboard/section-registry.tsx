@@ -35,6 +35,12 @@ const DASHBOARD_SECTIONS = [
     build: () => null,
   },
   {
+    id: 'channels',
+    titleKey: 'Channel Resource Analytics',
+    adminOnly: true,
+    build: () => null,
+  },
+  {
     id: 'flow',
     titleKey: 'Flow',
     build: () => null,
@@ -55,7 +61,7 @@ const DASHBOARD_SECTIONS = [
 
 export type DashboardSectionId = (typeof DASHBOARD_SECTIONS)[number]['id']
 
-const ADMIN_ONLY_SECTIONS = new Set<string>(['users', 'tokens'])
+const ADMIN_ONLY_SECTIONS = new Set<string>(['users', 'tokens', 'channels'])
 
 const dashboardRegistry = createSectionRegistry<
   DashboardSectionId,

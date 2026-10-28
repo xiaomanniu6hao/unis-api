@@ -87,6 +87,12 @@ const LazyPerformanceOverview = lazy(() =>
   }))
 )
 
+const LazyChannelResourceAnalytics = lazy(() =>
+  import('./components/channels/channel-resource-analytics').then((m) => ({
+    default: m.ChannelResourceAnalytics,
+  }))
+)
+
 const LazyUserCharts = lazy(() =>
   import('./components/users/user-charts').then((m) => ({
     default: m.UserCharts,
@@ -164,6 +170,9 @@ const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   },
   models: {
     titleKey: 'Model Call Analytics',
+  },
+  channels: {
+    titleKey: 'Channel Resource Analytics',
   },
   flow: {
     titleKey: 'Flow',
@@ -271,7 +280,8 @@ export function Dashboard() {
         (section) =>
           section !== 'overview' &&
           (section !== 'users' || isAdmin) &&
-          (section !== 'tokens' || isAdmin)
+          (section !== 'tokens' || isAdmin) &&
+          (section !== 'channels' || isAdmin)
       ),
     [isAdmin]
   )
@@ -424,6 +434,13 @@ export function Dashboard() {
                 </Suspense>
               </FadeIn>
             </>
+          )}
+          {activeSection === 'channels' && (
+            <FadeIn>
+              <Suspense fallback={<ModelChartsFallback />}>
+                <LazyChannelResourceAnalytics />
+              </Suspense>
+            </FadeIn>
           )}
           {activeSection === 'users' && (
             <FadeIn>

@@ -17,6 +17,7 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { ChannelAffinitySection } from '../general/channel-affinity'
+import { ChannelRuntimeSection } from '../general/channel-runtime'
 import { IoNetDeploymentSettingsSection } from '../integrations/ionet-deployment-settings-section'
 import type { ModelSettings } from '../types'
 import { createSectionRegistry } from '../utils/section-registry'
@@ -163,6 +164,49 @@ const MODELS_SECTIONS = [
             settings['channel_affinity_setting.default_ttl_seconds'],
           'channel_affinity_setting.rules':
             settings['channel_affinity_setting.rules'],
+        }}
+      />
+    ),
+  },
+  {
+    id: 'channel-runtime',
+    titleKey: 'Channel Runtime Monitor',
+    build: (settings: ModelSettings) => (
+      <ChannelRuntimeSection
+        defaultValues={{
+          'channel_runtime_setting.enabled':
+            settings['channel_runtime_setting.enabled'] ?? false,
+          'channel_runtime_setting.scrape_interval_seconds':
+            settings['channel_runtime_setting.scrape_interval_seconds'] ?? 5,
+          'channel_runtime_setting.scrape_timeout_ms':
+            settings['channel_runtime_setting.scrape_timeout_ms'] ?? 3000,
+          'channel_runtime_setting.sample_retention_hours':
+            settings['channel_runtime_setting.sample_retention_hours'] ?? 8760,
+          'channel_runtime_setting.default_max_batch':
+            settings['channel_runtime_setting.default_max_batch'] ?? 4,
+          'channel_runtime_setting.scrape_only_channels':
+            settings['channel_runtime_setting.scrape_only_channels'] ?? '[]',
+          'channel_runtime_setting.max_batch_overrides':
+            settings['channel_runtime_setting.max_batch_overrides'] ?? '[]',
+          'channel_runtime_setting.saturation_lock_enabled':
+            settings['channel_runtime_setting.saturation_lock_enabled'] ?? true,
+          'channel_runtime_setting.saturation_waiting_samples':
+            settings['channel_runtime_setting.saturation_waiting_samples'] ?? 3,
+          'channel_runtime_setting.saturation_release_samples':
+            settings['channel_runtime_setting.saturation_release_samples'] ?? 1,
+          'channel_runtime_setting.saturation_max_lock_seconds':
+            settings['channel_runtime_setting.saturation_max_lock_seconds'] ??
+            300,
+          'channel_runtime_setting.length_routing_enabled':
+            settings['channel_runtime_setting.length_routing_enabled'] ?? false,
+          'channel_runtime_setting.length_routing_fallback':
+            settings['channel_runtime_setting.length_routing_fallback'] ??
+            true,
+          'channel_runtime_setting.length_routing_rules':
+            formatJsonForEditor(
+              settings['channel_runtime_setting.length_routing_rules'] || '[]',
+              '[]'
+            ),
         }}
       />
     ),

@@ -241,6 +241,20 @@ export type ModelSettings = {
   'channel_affinity_setting.max_entries': number
   'channel_affinity_setting.default_ttl_seconds': number
   'channel_affinity_setting.rules': string
+  'channel_runtime_setting.enabled': boolean
+  'channel_runtime_setting.scrape_interval_seconds': number
+  'channel_runtime_setting.scrape_timeout_ms': number
+  'channel_runtime_setting.sample_retention_hours': number
+  'channel_runtime_setting.default_max_batch': number
+  'channel_runtime_setting.scrape_only_channels': string
+  'channel_runtime_setting.max_batch_overrides': string
+  'channel_runtime_setting.saturation_lock_enabled': boolean
+  'channel_runtime_setting.saturation_waiting_samples': number
+  'channel_runtime_setting.saturation_release_samples': number
+  'channel_runtime_setting.saturation_max_lock_seconds': number
+  'channel_runtime_setting.length_routing_enabled': boolean
+  'channel_runtime_setting.length_routing_fallback': boolean
+  'channel_runtime_setting.length_routing_rules': string
   'model_deployment.ionet.api_key': string
   'model_deployment.ionet.enabled': boolean
 }

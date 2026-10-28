@@ -18,6 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 
+import type { ChannelResourceResponse } from './components/channels/types'
 import type {
   FlowQuotaDataItem,
   QuotaDataItem,
@@ -114,6 +115,19 @@ export async function getFlowQuotaDates(
 export async function getUptimeStatus() {
   const res = await api.get<{ success: boolean; data: UptimeGroupResult[] }>(
     '/api/uptime/status'
+  )
+  return res.data
+}
+
+// ----------------------------------------------------------------------------
+// Channel Resource Analytics
+// ----------------------------------------------------------------------------
+
+// 按渠道聚合的调用情况 + 当前 Running/Waiting/最大 batch（渠道资源分析页）
+export async function getChannelResourceStats(hours = 24) {
+  const res = await api.get<{ success: boolean; data: ChannelResourceResponse }>(
+    '/api/channel_runtime/resource',
+    { params: { hours } }
   )
   return res.data
 }

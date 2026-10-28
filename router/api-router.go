@@ -3,6 +3,7 @@ package router
 import (
 	"github.com/QuantumNous/new-api/controller"
 	"github.com/QuantumNous/new-api/middleware"
+	"github.com/QuantumNous/new-api/service/authz"
 
 	// Import oauth package to register providers via init()
 	_ "github.com/QuantumNous/new-api/oauth"
@@ -210,6 +211,17 @@ func SetApiRouter(router *gin.Engine) {
 			customOAuthRoute.POST("/", controller.CreateCustomOAuthProvider)
 			customOAuthRoute.PUT("/:id", controller.UpdateCustomOAuthProvider)
 			customOAuthRoute.DELETE("/:id", controller.DeleteCustomOAuthProvider)
+		}
+		// 渠道运行时监控（vLLM Running/Waiting 采集、饱和锁、长度分流可观测面）
+		channelRuntimeRoute := apiRouter.Group("/channel_runtime")
+		channelRuntimeRoute.Use(middleware.AdminAuth())
+		{
+			channelRuntimeRoute.GET("/status", middleware.RequirePermission(authz.ChannelRead), controller.GetChannelRuntimeStatus)
+			channelRuntimeRoute.GET("/samples", middleware.RequirePermission(authz.ChannelRead), controller.GetChannelRuntimeSamples)
+			channelRuntimeRoute.GET("/limits", middleware.RequirePermission(authz.ChannelRead), controller.GetChannelRuntimeLimits)
+			channelRuntimeRoute.GET("/resource", middleware.RequirePermission(authz.ChannelRead), controller.GetChannelResourceStats)
+			channelRuntimeRoute.POST("/refresh", middleware.RequirePermission(authz.ChannelOperate), controller.RefreshChannelRuntime)
+			channelRuntimeRoute.POST("/:id/unlock", middleware.RequirePermission(authz.ChannelOperate), controller.UnlockChannelRuntime)
 		}
 		performanceRoute := apiRouter.Group("/performance")
 		performanceRoute.Use(middleware.RootAuth())

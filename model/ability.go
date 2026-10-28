@@ -105,7 +105,7 @@ func getChannelQuery(group string, model string, retry int) (*gorm.DB, error) {
 	return channelQuery, nil
 }
 
-func GetChannel(group string, model string, retry int, requestPath string) (*Channel, error) {
+func GetChannel(group string, model string, retry int, requestPath string, constraint *ChannelSelectionConstraint) (*Channel, error) {
 	var abilities []Ability
 
 	var err error = nil
@@ -122,6 +122,32 @@ func GetChannel(group string, model string, retry int, requestPath string) (*Cha
 		return nil, err
 	}
 	abilities = filterAbilitiesByRequestPath(abilities, requestPath)
+
+	// 长度分流 + 饱和锁过滤：只在候选集合非空时生效，且不会把候选清空
+	if len(abilities) > 0 {
+		channelIds := make([]int, 0, len(abilities))
+		for _, ability := range abilities {
+			channelIds = append(channelIds, ability.ChannelId)
+		}
+		allowedIds := filterChannelIdsByRuntimeState(channelIds, constraint)
+		if len(allowedIds) == 0 {
+			return nil, nil
+		}
+		if len(allowedIds) != len(channelIds) {
+			allowedSet := make(map[int]struct{}, len(allowedIds))
+			for _, id := range allowedIds {
+				allowedSet[id] = struct{}{}
+			}
+			filtered := make([]Ability, 0, len(allowedIds))
+			for _, ability := range abilities {
+				if _, ok := allowedSet[ability.ChannelId]; ok {
+					filtered = append(filtered, ability)
+				}
+			}
+			abilities = filtered
+		}
+	}
+
 	channel := Channel{}
 	if len(abilities) > 0 {
 		// Randomly choose one

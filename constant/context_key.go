@@ -72,4 +72,8 @@ const (
 	// fallback in authHelper (finishAdminAudit) skips its record to avoid
 	// duplicate entries.
 	ContextKeyAuditLogged ContextKey = "audit_logged"
+
+	// ContextKeyLengthRouteChannels 保存按输入长度分流后允许调度的渠道 id 列表，
+	// 由 distributor 在选渠道前写入，选择/重试路径复用（避免重试时丢失分流约束）。
+	ContextKeyLengthRouteChannels ContextKey = "length_route_channels"
 )

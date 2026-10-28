@@ -125,6 +125,9 @@ func main() {
 	// Subscription quota reset task (daily/weekly/monthly/custom)
 	service.StartSubscriptionQuotaResetTask()
 
+	// 渠道运行时监控：采集 vLLM Running/Waiting，驱动饱和锁与长度分流
+	service.StartChannelRuntimeMonitor()
+
 	// Report this process as a system instance so the System Info page can show
 	// all currently alive nodes in multi-instance deployments.
 	service.StartSystemInstanceReporter()

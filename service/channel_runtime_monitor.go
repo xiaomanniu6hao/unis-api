@@ -1,0 +1,523 @@
+package service
+
+import (
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"time"
+
+	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
+	"github.com/QuantumNous/new-api/setting/operation_setting"
+)
+
+const (
+	metricNumRequestsRunning = "vllm:num_requests_running"
+	metricNumRequestsWaiting = "vllm:num_requests_waiting"
+	metricMaxNumSeqs         = "vllm:max_num_seqs"
+	metricGPUCacheUsage      = "vllm:gpu_cache_usage_perc"
+	metricPrefixCacheHitRate = "vllm:gpu_prefix_cache_hit_rate"
+	metricPrefixCacheHits    = "vllm:prefix_cache_hits_total"
+	metricPrefixCacheQueries = "vllm:prefix_cache_queries_total"
+
+	// runtimeCleanupInterval 控制过期时序数据的清理频率
+	runtimeCleanupInterval = 10 * time.Minute
+	// runtimeFailureLogInterval 限制同一渠道采集失败日志的输出频率
+	runtimeFailureLogInterval = 2 * time.Minute
+	// runtimeMetricsPath 是 vLLM 暴露 Prometheus 指标的标准路径。
+	// 采集地址由渠道 base_url 推导（scheme://host + 该路径），不需要手工配置。
+	runtimeMetricsPath = "/metrics"
+)
+
+var (
+	channelRuntimeMonitorOnce sync.Once
+	// channelRuntimeCollecting 防止手动刷新与定时轮次并发执行
+	channelRuntimeCollecting atomic.Bool
+	// channelRuntimeManualTrigger 手动立即采集信号
+	channelRuntimeManualTrigger = make(chan struct{}, 1)
+	// channelRuntimeLastFailureLog 记录每个渠道上次失败日志时间，避免刷屏
+	channelRuntimeLastFailureLog sync.Map // channelId -> int64
+	channelRuntimeLastCleanup    atomic.Int64
+)
+
+// StartChannelRuntimeMonitor 启动运行时指标采集循环。
+// 采集间隔读取配置，配置热更新后下一轮自动生效。
+func StartChannelRuntimeMonitor() {
+	channelRuntimeMonitorOnce.Do(func() {
+		common.SysLog("channel runtime monitor started")
+		go func() {
+			for {
+				setting := operation_setting.GetChannelRuntimeSetting()
+				operation_setting.NormalizeChannelRuntimeSetting(setting)
+				interval := time.Duration(setting.ScrapeIntervalSeconds) * time.Second
+				if !setting.Enabled {
+					interval = 30 * time.Second
+					model.ResetChannelRuntimeStates()
+				}
+
+				select {
+				case <-time.After(interval):
+				case <-channelRuntimeManualTrigger:
+				}
+
+				if setting.Enabled {
+					runChannelRuntimeCollection()
+				}
+			}
+		}()
+	})
+}
+
+// TriggerChannelRuntimeCollection 请求一次立即采集（后台手动刷新）。
+func TriggerChannelRuntimeCollection() {
+	select {
+	case channelRuntimeManualTrigger <- struct{}{}:
+	default:
+	}
+}
+
+func runChannelRuntimeCollection() {
+	if !channelRuntimeCollecting.CompareAndSwap(false, true) {
+		return
+	}
+	defer channelRuntimeCollecting.Store(false)
+
+	setting := operation_setting.GetChannelRuntimeSetting()
+	operation_setting.NormalizeChannelRuntimeSetting(setting)
+	if !setting.Enabled {
+		return
+	}
+
+	channelIds, err := model.GetEnabledChannelIds()
+	if err != nil {
+		common.SysError("channel runtime: list channels failed: " + err.Error())
+		return
+	}
+
+	interval := int64(setting.ScrapeIntervalSeconds)
+	collectedAt := time.Now().Unix() / interval * interval
+
+	var samples []model.ChannelRuntimeSample
+	var limits []model.ChannelRuntimeLimit
+
+	for _, channelId := range channelIds {
+		if !setting.ShouldScrapeChannel(channelId) {
+			continue
+		}
+		channel, err := model.CacheGetChannel(channelId)
+		if err != nil || channel == nil {
+			continue
+		}
+		channelSamples, channelLimits, scrapeErr := collectChannelRuntime(channel, setting, collectedAt)
+		if scrapeErr != nil {
+			model.RecordChannelRuntimeError(channelId, runtimeMetricsURL(channel), scrapeErr, collectedAt)
+			logChannelRuntimeFailure(channelId, scrapeErr)
+			continue
+		}
+		samples = append(samples, channelSamples...)
+		limits = append(limits, channelLimits...)
+		applyChannelRuntimeObservation(channel, channelSamples, channelLimits, collectedAt)
+	}
+
+	if len(samples) > 0 {
+		if err := model.SaveChannelRuntimeSamples(samples); err != nil {
+			common.SysError("channel runtime: save samples failed: " + err.Error())
+		}
+	}
+	if len(limits) > 0 {
+		if err := model.UpsertChannelRuntimeLimits(limits); err != nil {
+			common.SysError("channel runtime: save limits failed: " + err.Error())
+		}
+	}
+
+	maybeCleanupChannelRuntimeSamples(setting)
+}
+
+func maybeCleanupChannelRuntimeSamples(setting *operation_setting.ChannelRuntimeSetting) {
+	now := time.Now().Unix()
+	last := channelRuntimeLastCleanup.Load()
+	if last > 0 && now-last < int64(runtimeCleanupInterval.Seconds()) {
+		return
+	}
+	if !channelRuntimeLastCleanup.CompareAndSwap(last, now) {
+		return
+	}
+	cutoff := model.ChannelRuntimeRetentionCutoff(setting.SampleRetentionHours)
+	if err := model.DeleteChannelRuntimeSamplesBefore(cutoff); err != nil {
+		common.SysError("channel runtime: cleanup samples failed: " + err.Error())
+	}
+}
+
+// applyChannelRuntimeObservation 把渠道级聚合观测送入饱和锁状态机。
+func applyChannelRuntimeObservation(
+	channel *model.Channel,
+	samples []model.ChannelRuntimeSample,
+	limits []model.ChannelRuntimeLimit,
+	collectedAt int64,
+) {
+	if len(samples) == 0 {
+		return
+	}
+	observation := model.ChannelRuntimeObservation{
+		ChannelId:      channel.Id,
+		ChannelName:    channel.Name,
+		ModelNames:     strings.Join(channel.GetModels(), ","),
+		CandidateCount: model.CountRuntimeCandidateChannels(channel.Id),
+		CollectedAt:    collectedAt,
+	}
+	for _, sample := range samples {
+		observation.Running += sample.Running
+		observation.Waiting += sample.Waiting
+		if sample.KVCacheUsage > observation.KVCacheUsage {
+			observation.KVCacheUsage = sample.KVCacheUsage
+		}
+		if sample.PrefixCacheHitRate > observation.PrefixCacheHitRate {
+			observation.PrefixCacheHitRate = sample.PrefixCacheHitRate
+		}
+	}
+	for _, limit := range limits {
+		if limit.PeakRunning > observation.PeakRunning {
+			observation.PeakRunning = limit.PeakRunning
+		}
+		// 最大 batch 是渠道级配置，直接取（不能按模型累加）
+		observation.MaxBatch = limit.MaxBatch
+		observation.MaxBatchSource = limit.Source
+	}
+	model.ApplyChannelRuntimeObservation(observation)
+}
+
+// collectChannelRuntime 抓取单个渠道的 metrics 并转为样本与上限记录。
+func collectChannelRuntime(
+	channel *model.Channel,
+	setting *operation_setting.ChannelRuntimeSetting,
+	collectedAt int64,
+) ([]model.ChannelRuntimeSample, []model.ChannelRuntimeLimit, error) {
+	metricsURL := runtimeMetricsURL(channel)
+	if metricsURL == "" {
+		return nil, nil, fmt.Errorf("base_url 为空，无法推导 metrics 地址")
+	}
+	body, err := fetchMetricsText(metricsURL, setting.ScrapeTimeoutMs)
+	if err != nil {
+		return nil, nil, err
+	}
+	scraped := parseVLLMMetrics(body)
+	if !scraped.Found {
+		return nil, nil, fmt.Errorf("%s 未包含 vllm 运行时指标", metricsURL)
+	}
+
+	channelModels := channel.GetModels()
+	if len(channelModels) == 0 {
+		return nil, nil, nil
+	}
+
+	// 指标带 model_name 标签时按模型对齐；没有标签（vLLM 单实例单模型）时归到渠道首个模型。
+	modelNames := make([]string, 0, len(scraped.ByModel))
+	if len(scraped.ByModel) > 0 {
+		for modelName := range scraped.ByModel {
+			modelNames = append(modelNames, modelName)
+		}
+	} else {
+		modelNames = append(modelNames, channelModels[0])
+	}
+
+	lockedAtCollection := model.IsChannelRuntimeLocked(channel.Id)
+
+	// 最大 batch 是渠道维度（一个渠道 = 一个 vLLM 实例 = 一个模型），
+	// 优先级：按渠道名手工覆盖 > vLLM 暴露的 max_num_seqs > 全局默认（4）。
+	peak := model.PeakRunningForChannel(channel.Id)
+	if scraped.Total.Running > peak {
+		peak = scraped.Total.Running
+	}
+	maxBatch, source := resolveChannelMaxBatch(setting, channel.Name, scraped.Total.MaxNumSeqs)
+
+	samples := make([]model.ChannelRuntimeSample, 0, len(modelNames))
+	for _, modelName := range modelNames {
+		series := scraped.SeriesFor(modelName)
+		samples = append(samples, model.ChannelRuntimeSample{
+			ChannelId:          channel.Id,
+			ModelName:          modelName,
+			CollectedAt:        collectedAt,
+			Running:            series.Running,
+			Waiting:            series.Waiting,
+			MaxBatch:           maxBatch,
+			KVCacheUsage:       series.GPUCacheUsage,
+			PrefixCacheHitRate: series.PrefixCacheHitRate,
+			Locked:             lockedAtCollection,
+		})
+	}
+
+	limits := []model.ChannelRuntimeLimit{{
+		ChannelId:   channel.Id,
+		ChannelName: channel.Name,
+		MaxBatch:    maxBatch,
+		Source:      source,
+		PeakRunning: peak,
+		UpdatedAt:   collectedAt,
+	}}
+	return samples, limits, nil
+}
+
+// resolveChannelMaxBatch 按 渠道名手工覆盖 > /metrics 的 max_num_seqs > 全局默认(4) 解析最大并发。
+// 一个渠道只服务一个模型，所以不再需要模型维度。
+func resolveChannelMaxBatch(
+	setting *operation_setting.ChannelRuntimeSetting,
+	channelName string,
+	metricMaxNumSeqs int,
+) (int, string) {
+	if override := setting.LookupMaxBatchOverride(channelName); override > 0 {
+		return override, model.ChannelRuntimeLimitSourceManual
+	}
+	if metricMaxNumSeqs > 0 {
+		return metricMaxNumSeqs, model.ChannelRuntimeLimitSourceMetrics
+	}
+	if setting.DefaultMaxBatch > 0 {
+		return setting.DefaultMaxBatch, model.ChannelRuntimeLimitSourceDefault
+	}
+	return operation_setting.DefaultChannelMaxBatch, model.ChannelRuntimeLimitSourceDefault
+}
+
+// runtimeMetricsURL 从渠道 base_url 自动推导 metrics 地址：
+// 取 scheme+host，拼上 vLLM 标准的 /metrics，忽略 base_url 里的 /v1 之类业务路径。
+func runtimeMetricsURL(channel *model.Channel) string {
+	baseURL := strings.TrimSpace(channel.GetBaseURL())
+	if baseURL == "" {
+		return ""
+	}
+	parsed, err := url.Parse(baseURL)
+	if err != nil || parsed.Host == "" {
+		return ""
+	}
+	scheme := parsed.Scheme
+	if scheme == "" {
+		scheme = "http"
+	}
+	return fmt.Sprintf("%s://%s%s", scheme, parsed.Host, runtimeMetricsPath)
+}
+
+func fetchMetricsText(metricsURL string, timeoutMs int) (string, error) {
+	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
+	req, err := http.NewRequest(http.MethodGet, metricsURL, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("metrics 返回状态码 %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	if err != nil {
+		return "", err
+	}
+	return string(body), nil
+}
+
+func logChannelRuntimeFailure(channelId int, err error) {
+	now := time.Now().Unix()
+	if last, ok := channelRuntimeLastFailureLog.Load(channelId); ok {
+		if lastAt, _ := last.(int64); now-lastAt < int64(runtimeFailureLogInterval.Seconds()) {
+			return
+		}
+	}
+	channelRuntimeLastFailureLog.Store(channelId, now)
+	common.SysError(fmt.Sprintf("channel runtime: collect channel #%d failed: %s", channelId, err.Error()))
+}
+
+// vllmMetricSeries 是单个模型（或无标签时的整机）的一组运行时指标。
+type vllmMetricSeries struct {
+	Running            int
+	Waiting            int
+	MaxNumSeqs         int
+	GPUCacheUsage      float64
+	PrefixCacheHitRate float64
+}
+
+// vllmMetrics 解析后的结果，ByModel 仅在指标带 model_name 标签时填充，合计值放在 Total。
+type vllmMetrics struct {
+	Found   bool
+	Total   vllmMetricSeries
+	ByModel map[string]vllmMetricSeries
+}
+
+// SeriesFor 返回指定模型的指标，无模型标签时回退到整机合计值。
+func (m vllmMetrics) SeriesFor(modelName string) vllmMetricSeries {
+	if series, ok := m.ByModel[modelName]; ok {
+		return series
+	}
+	return m.Total
+}
+
+// parseVLLMMetrics 解析 Prometheus 文本格式，只提取 vLLM 运行时相关的几个指标。
+func parseVLLMMetrics(text string) vllmMetrics {
+	result := vllmMetrics{ByModel: make(map[string]vllmMetricSeries)}
+	var prefixHits, prefixQueries float64
+	hitModelHits := make(map[string]float64)
+	hitModelQueries := make(map[string]float64)
+
+	for _, line := range strings.Split(text, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		name, labels, value, ok := splitMetricLine(line)
+		if !ok {
+			continue
+		}
+		modelName := labels["model_name"]
+		switch name {
+		case metricNumRequestsRunning:
+			result.Found = true
+			result.addRunning(modelName, int(value))
+		case metricNumRequestsWaiting:
+			result.Found = true
+			result.addWaiting(modelName, int(value))
+		case metricMaxNumSeqs:
+			result.addMaxNumSeqs(modelName, int(value))
+		case metricGPUCacheUsage:
+			result.addCacheUsage(modelName, value)
+		case metricPrefixCacheHitRate:
+			result.addPrefixHitRate(modelName, value)
+		case metricPrefixCacheHits:
+			if modelName == "" {
+				prefixHits += value
+			} else {
+				hitModelHits[modelName] += value
+			}
+		case metricPrefixCacheQueries:
+			if modelName == "" {
+				prefixQueries += value
+			} else {
+				hitModelQueries[modelName] += value
+			}
+		}
+	}
+
+	if result.Total.PrefixCacheHitRate == 0 && prefixQueries > 0 {
+		result.Total.PrefixCacheHitRate = prefixHits / prefixQueries * 100
+	}
+	for modelName, series := range result.ByModel {
+		if series.PrefixCacheHitRate == 0 && hitModelQueries[modelName] > 0 {
+			series.PrefixCacheHitRate = hitModelHits[modelName] / hitModelQueries[modelName] * 100
+			result.ByModel[modelName] = series
+		}
+	}
+	return result
+}
+
+func (m *vllmMetrics) addRunning(modelName string, value int) {
+	m.Total.Running += value
+	if modelName == "" {
+		return
+	}
+	series := m.ByModel[modelName]
+	series.Running += value
+	m.ByModel[modelName] = series
+}
+
+func (m *vllmMetrics) addWaiting(modelName string, value int) {
+	m.Total.Waiting += value
+	if modelName == "" {
+		return
+	}
+	series := m.ByModel[modelName]
+	series.Waiting += value
+	m.ByModel[modelName] = series
+}
+
+func (m *vllmMetrics) addMaxNumSeqs(modelName string, value int) {
+	if value > m.Total.MaxNumSeqs {
+		m.Total.MaxNumSeqs = value
+	}
+	if modelName == "" {
+		return
+	}
+	series := m.ByModel[modelName]
+	if value > series.MaxNumSeqs {
+		series.MaxNumSeqs = value
+	}
+	m.ByModel[modelName] = series
+}
+
+func (m *vllmMetrics) addCacheUsage(modelName string, value float64) {
+	usage := value * 100
+	if usage > m.Total.GPUCacheUsage {
+		m.Total.GPUCacheUsage = usage
+	}
+	if modelName == "" {
+		return
+	}
+	series := m.ByModel[modelName]
+	if usage > series.GPUCacheUsage {
+		series.GPUCacheUsage = usage
+	}
+	m.ByModel[modelName] = series
+}
+
+func (m *vllmMetrics) addPrefixHitRate(modelName string, value float64) {
+	rate := value * 100
+	if rate > m.Total.PrefixCacheHitRate {
+		m.Total.PrefixCacheHitRate = rate
+	}
+	if modelName == "" {
+		return
+	}
+	series := m.ByModel[modelName]
+	if rate > series.PrefixCacheHitRate {
+		series.PrefixCacheHitRate = rate
+	}
+	m.ByModel[modelName] = series
+}
+
+// splitMetricLine 解析 Prometheus 文本行：metric_name{label="v",...} value [timestamp]。
+func splitMetricLine(line string) (string, map[string]string, float64, bool) {
+	nameEnd := strings.IndexAny(line, "{ ")
+	if nameEnd <= 0 {
+		return "", nil, 0, false
+	}
+	name := line[:nameEnd]
+	labels := map[string]string{}
+	rest := line[nameEnd:]
+	if strings.HasPrefix(rest, "{") {
+		labelEnd := strings.LastIndex(rest, "}")
+		if labelEnd < 0 {
+			return "", nil, 0, false
+		}
+		labels = parseMetricLabels(rest[1:labelEnd])
+		rest = rest[labelEnd+1:]
+	}
+	fields := strings.Fields(rest)
+	if len(fields) == 0 {
+		return "", nil, 0, false
+	}
+	value, err := strconv.ParseFloat(fields[0], 64)
+	if err != nil {
+		return "", nil, 0, false
+	}
+	return name, labels, value, true
+}
+
+func parseMetricLabels(raw string) map[string]string {
+	labels := make(map[string]string)
+	for _, pair := range strings.Split(raw, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		eq := strings.Index(pair, "=")
+		if eq <= 0 {
+			continue
+		}
+		key := strings.TrimSpace(pair[:eq])
+		value := strings.Trim(strings.TrimSpace(pair[eq+1:]), `"`)
+		labels[key] = value
+	}
+	return labels
+}

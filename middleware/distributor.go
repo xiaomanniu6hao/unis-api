@@ -101,12 +101,29 @@ func Distribute() func(c *gin.Context) {
 					}
 				}
 
+				// 按输入长度分流：算出允许调度的渠道集合写入上下文，
+				// 选择层（含重试）据此限制候选渠道；亲和性命中但不在集合内的渠道会被跳过。
+				routeChannelIds, lengthRouted := service.ResolveLengthRouteChannelIds(c, modelRequest.Model)
+				if lengthRouted {
+					common.SetContextKey(c, constant.ContextKeyLengthRouteChannels, routeChannelIds)
+				}
+				affinityAllowed := func(channelId int) bool {
+					if !lengthRouted {
+						return true
+					}
+					return slices.Contains(routeChannelIds, channelId)
+				}
+
 				if preferredChannelID, found := service.GetPreferredChannelByAffinity(c, modelRequest.Model, usingGroup); found {
 					affinityUsable := false
+					// 亲和渠道只是因为长度分流而被排除时，不清缓存：否则短请求会反复丢掉会话粘性
+					excludedByLengthRoute := false
 					preferred, err := model.CacheGetChannel(preferredChannelID)
 					if err == nil && preferred != nil && preferred.Status == common.ChannelStatusEnabled &&
 						channelSupportsRequestPath(preferred, c.Request.URL.Path) {
-						if usingGroup == "auto" {
+						if !affinityAllowed(preferred.Id) {
+							excludedByLengthRoute = true
+						} else if usingGroup == "auto" {
 							userGroup := common.GetContextKeyString(c, constant.ContextKeyUserGroup)
 							autoGroups := service.GetUserAutoGroup(userGroup)
 							for _, g := range autoGroups {
@@ -126,7 +143,7 @@ func Distribute() func(c *gin.Context) {
 							service.MarkChannelAffinityUsed(c, usingGroup, preferred.Id)
 						}
 					}
-					if !affinityUsable && !service.ShouldKeepChannelAffinityOnChannelDisabled() {
+					if !affinityUsable && !excludedByLengthRoute && !service.ShouldKeepChannelAffinityOnChannelDisabled() {
 						service.ClearCurrentChannelAffinityCache(c)
 					}
 				}
