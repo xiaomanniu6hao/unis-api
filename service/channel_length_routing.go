@@ -8,6 +8,7 @@ import (
 	"github.com/QuantumNous/new-api/common"
 	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/tokenkit"
 
 	"github.com/gin-gonic/gin"
 )
@@ -99,7 +100,7 @@ func estimateRequestInputLength(c *gin.Context, modelName string) (int, bool) {
 	if len(body) > lengthRouteMaxBodyBytes {
 		return lengthRouteMaxBodyBytes, true
 	}
-	return EstimateTokenByModel(modelName, string(body)), true
+	return tokenkit.Estimate(modelName, string(body)), true
 }
 
 // ResolveLengthRouteChannelIds 按「模型 + 输入长度」解析出允许调度的渠道集合。

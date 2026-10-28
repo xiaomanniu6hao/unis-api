@@ -312,6 +312,14 @@ func NewChannelSelectionConstraint(channelIds []int, fallbackToAll bool) *Channe
 	return &ChannelSelectionConstraint{AllowedChannelIds: allowed, FallbackToAll: fallbackToAll}
 }
 
+// IsChannelAllowedByRuntimeState 判断单个渠道在长度分流 + 饱和锁约束下是否可用。
+func IsChannelAllowedByRuntimeState(channelId int, constraint *ChannelSelectionConstraint) bool {
+	if constraint == nil {
+		return true
+	}
+	return len(filterChannelIdsByRuntimeState([]int{channelId}, constraint)) > 0
+}
+
 // filterChannelIdsByRuntimeState 按长度分流 + 饱和锁过滤候选渠道。
 // 关键保护：任何过滤都不得把候选清空——
 //   - 长度分流命中但集合内无可用渠道时，按配置退回全量候选；
