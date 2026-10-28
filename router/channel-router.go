@@ -29,10 +29,13 @@ func registerChannelRoutes(apiRouter *gin.RouterGroup) {
 	)
 
 	for _, route := range channelPermissionRoutes {
-		channelRoute.Handle(route.method, route.path,
-			middleware.RequirePermission(route.permission),
-			route.handler,
-		)
+		handler := middleware.RequirePermission(route.permission)
+		channelRoute.Handle(route.method, route.path, handler)
+		// relay 的根级参数路由（/:mode/mj/...）会让 gin 放弃尾斜杠重定向，
+		// 前端调用不带斜杠的 /api/channel 会直接落到 404，因此根路径额外注册一份别名。
+		if route.path == "/" {
+			channelRoute.Handle(route.method, "", handler)
+		}
 	}
 }
 

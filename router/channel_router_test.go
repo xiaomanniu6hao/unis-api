@@ -37,6 +37,27 @@ func TestChannelStatusRoutesRegisterWithoutConflict(t *testing.T) {
 	})
 }
 
+// relay 的根级参数路由会让 gin 的尾斜杠重定向失效，前端调用不带斜杠的
+// /api/channel 时必须直接命中路由，因此根路径要同时注册带斜杠和不带斜杠两个版本。
+func TestChannelGroupRootRegistersBothSlashVariants(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	engine := gin.New()
+	registerChannelRoutes(engine.Group("/api"))
+
+	registered := make(map[string]bool)
+	for _, route := range engine.Routes() {
+		registered[route.Method+" "+route.Path] = true
+	}
+
+	for _, route := range channelPermissionRoutes {
+		if route.path != "/" {
+			continue
+		}
+		assert.True(t, registered[route.method+" /api/channel"], "%s /api/channel 未注册", route.method)
+		assert.True(t, registered[route.method+" /api/channel/"], "%s /api/channel/ 未注册", route.method)
+	}
+}
+
 func assertChannelRoutePermission(t *testing.T, method string, path string, permission authz.Permission, handler any) {
 	t.Helper()
 	for _, route := range channelPermissionRoutes {
