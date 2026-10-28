@@ -32,6 +32,8 @@ const defaultSecuritySettings: SecuritySettings = {
   ModelRequestRateLimitGroup: '',
   TokenConcurrentLimitEnabled: false,
   TokenConcurrentLimitMaxCount: 2,
+  TokenConcurrentLimitRetryAfterSeconds: 5,
+  TokenConcurrentLimitModelMaxCountOverrides: '',
   TokenConcurrentLimitExcludedTokenIds: '',
   CheckSensitiveEnabled: false,
   CheckSensitiveOnPromptEnabled: false,

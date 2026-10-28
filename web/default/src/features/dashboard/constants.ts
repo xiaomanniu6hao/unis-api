@@ -21,6 +21,10 @@ import type { DashboardChartPreferences, DashboardFilters } from './types'
 export const TIME_GRANULARITY_STORAGE_KEY = 'data_export_default_time'
 export const DASHBOARD_CHART_PREFERENCES_STORAGE_KEY =
   'dashboard_models_chart_preferences'
+export const DASHBOARD_EXCLUDED_TOKEN_IDS_STORAGE_KEY =
+  'dashboard_excluded_token_ids'
+// 默认排除的公共共享令牌：名称包含这些关键词（不区分大小写）的令牌
+export const DEFAULT_EXCLUDED_TOKEN_PATTERNS = ['rerank', 'embed', 'lobehub']
 export const DEFAULT_TIME_GRANULARITY = 'hour' as const
 export const MAX_CHART_TREND_POINTS = 7
 
@@ -66,4 +70,5 @@ export const EMPTY_DASHBOARD_FILTERS: DashboardFilters = {
   end_timestamp: undefined,
   time_granularity: 'hour',
   username: '',
+  excluded_token_ids: '',
 }

@@ -21,6 +21,7 @@ import { api } from '@/lib/api'
 import type {
   FlowQuotaDataItem,
   QuotaDataItem,
+  TokenQuotaDataItem,
   UptimeGroupResult,
 } from './types'
 
@@ -40,6 +41,7 @@ export async function getUserQuotaDates(
     end_timestamp: number
     default_time?: string
     username?: string
+    excluded_token_ids?: string
   },
   isAdmin = false
 ) {
@@ -51,6 +53,15 @@ export async function getUserQuotaDates(
   return res.data
 }
 
+// 数据看板筛选用的轻量令牌列表（id + name）
+export async function getDataFilterTokens() {
+  const res = await api.get<{
+    success: boolean
+    data: { id: number; name: string }[]
+  }>('/api/data/tokens')
+  return res.data
+}
+
 // ----------------------------------------------------------------------------
 // System Monitoring
 // ----------------------------------------------------------------------------
@@ -58,9 +69,23 @@ export async function getUserQuotaDates(
 export async function getUserQuotaDataByUsers(params: {
   start_timestamp: number
   end_timestamp: number
+  excluded_token_ids?: string
 }) {
   const res = await api.get<{ success: boolean; data: QuotaDataItem[] }>(
     '/api/data/users',
+    { params }
+  )
+  return res.data
+}
+
+// 令牌统计：按令牌聚合的当前用户自己的额度数据
+export async function getTokenQuotaDataByTokens(params: {
+  start_timestamp: number
+  end_timestamp: number
+  excluded_token_ids?: string
+}) {
+  const res = await api.get<{ success: boolean; data: TokenQuotaDataItem[] }>(
+    '/api/data/tokens/stat',
     { params }
   )
   return res.data
@@ -72,6 +97,7 @@ export async function getFlowQuotaDates(
     end_timestamp: number
     default_time?: string
     username?: string
+    excluded_token_ids?: string
   },
   isAdmin = false
 ) {

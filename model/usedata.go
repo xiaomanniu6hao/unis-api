@@ -2,6 +2,8 @@ package model
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -160,24 +162,120 @@ func GetQuotaDataByUserId(userId int, startTime int64, endTime int64) (quotaData
 	return quotaDatas, err
 }
 
-func GetQuotaDataGroupByUser(startTime int64, endTime int64) (quotaData []*QuotaData, err error) {
+func GetQuotaDataGroupByUser(startTime int64, endTime int64, excludedTokenIds []int) (quotaData []*QuotaData, err error) {
 	var quotaDatas []*QuotaData
-	err = DB.Table("quota_data").
+	err = applyExcludedTokenIds(DB.Table("quota_data").
 		Select("username, created_at, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
-		Where("created_at >= ? and created_at <= ?", startTime, endTime).
+		Where("created_at >= ? and created_at <= ?", startTime, endTime), excludedTokenIds).
 		Group("username, created_at").
 		Find(&quotaDatas).Error
 	return quotaDatas, err
 }
 
-func GetAllQuotaDates(startTime int64, endTime int64, username string) (quotaData []*QuotaData, err error) {
+// TokenQuotaData 令牌维度的看板聚合数据
+type TokenQuotaData struct {
+	TokenID   int    `json:"token_id" gorm:"column:token_id"`
+	TokenName string `json:"token_name" gorm:"-"`
+	CreatedAt int64  `json:"created_at" gorm:"column:created_at"`
+	TokenUsed int    `json:"token_used" gorm:"column:token_used"`
+	Count     int    `json:"count" gorm:"column:count"`
+	Quota     int    `json:"quota" gorm:"column:quota"`
+}
+
+// GetQuotaDataGroupByToken 按令牌聚合当前用户自己的 quota_data，并回填令牌名（已删除令牌名为空，由前端展示 #id）。
+func GetQuotaDataGroupByToken(userId int, startTime int64, endTime int64, excludedTokenIds []int) ([]*TokenQuotaData, error) {
+	rows := make([]*TokenQuotaData, 0)
+	err := applyExcludedTokenIds(DB.Table("quota_data").
+		Select("token_id, created_at, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
+		Where("user_id = ? and created_at >= ? and created_at <= ? and token_id > 0", userId, startTime, endTime), excludedTokenIds).
+		Group("token_id, created_at").
+		Find(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	tokenIDSet := make(map[int]struct{})
+	tokenIDs := make([]int, 0)
+	for _, row := range rows {
+		if _, ok := tokenIDSet[row.TokenID]; ok {
+			continue
+		}
+		tokenIDSet[row.TokenID] = struct{}{}
+		tokenIDs = append(tokenIDs, row.TokenID)
+	}
+	if len(tokenIDs) == 0 {
+		return rows, nil
+	}
+	var tokens []struct {
+		Id   int    `gorm:"column:id"`
+		Name string `gorm:"column:name"`
+	}
+	if err := DB.Model(&Token{}).Select("id, name").Where("id IN ?", tokenIDs).Find(&tokens).Error; err != nil {
+		return nil, err
+	}
+	tokenNameByID := make(map[int]string, len(tokens))
+	for _, token := range tokens {
+		tokenNameByID[token.Id] = token.Name
+	}
+	for _, row := range rows {
+		row.TokenName = tokenNameByID[row.TokenID]
+	}
+	return rows, nil
+}
+
+// applyExcludedTokenIds 给 quota_data 查询附加令牌排除条件（token_id NOT IN）。
+// 空列表不附加任何条件，表示所有令牌都参与统计。
+func applyExcludedTokenIds(query *gorm.DB, excludedTokenIds []int) *gorm.DB {
+	if len(excludedTokenIds) > 0 {
+		return query.Where("token_id NOT IN ?", excludedTokenIds)
+	}
+	return query
+}
+
+// parseExcludedTokenIds 解析逗号分隔的令牌 ID 列表（去重、仅保留正整数）。
+func parseExcludedTokenIds(raw string) []int {
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	seen := make(map[int]bool, len(parts))
+	result := make([]int, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		id, err := strconv.Atoi(p)
+		if err != nil || id <= 0 || seen[id] {
+			continue
+		}
+		seen[id] = true
+		result = append(result, id)
+	}
+	return result
+}
+
+// ParseExcludedTokenIds 供 controller 解析前端传入的排除令牌参数。
+func ParseExcludedTokenIds(raw string) []int {
+	return parseExcludedTokenIds(raw)
+}
+
+func GetAllQuotaDates(startTime int64, endTime int64, username string, excludedTokenIds []int) (quotaData []*QuotaData, err error) {
 	if username != "" {
-		return GetQuotaDataByUsername(username, startTime, endTime)
+		if len(excludedTokenIds) == 0 {
+			return GetQuotaDataByUsername(username, startTime, endTime)
+		}
+		var quotaDatas []*QuotaData
+		err = applyExcludedTokenIds(DB.Table("quota_data").
+			Select("user_id, username, model_name, created_at, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used").
+			Where("username = ? and created_at >= ? and created_at <= ?", username, startTime, endTime), excludedTokenIds).
+			Group("user_id, username, model_name, created_at").
+			Find(&quotaDatas).Error
+		return quotaDatas, err
 	}
 	var quotaDatas []*QuotaData
 	// 从quota_data表中查询数据
 	// only select model_name, sum(count) as count, sum(quota) as quota, model_name, created_at from quota_data group by model_name, created_at;
 	//err = DB.Table("quota_data").Where("created_at >= ? and created_at <= ?", startTime, endTime).Find(&quotaDatas).Error
-	err = DB.Table("quota_data").Select("model_name, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used, created_at").Where("created_at >= ? and created_at <= ?", startTime, endTime).Group("model_name, created_at").Find(&quotaDatas).Error
+	err = applyExcludedTokenIds(DB.Table("quota_data").Select("model_name, sum(count) as count, sum(quota) as quota, sum(token_used) as token_used, created_at").Where("created_at >= ? and created_at <= ?", startTime, endTime), excludedTokenIds).Group("model_name, created_at").Find(&quotaDatas).Error
 	return quotaDatas, err
 }

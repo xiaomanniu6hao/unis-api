@@ -49,10 +49,12 @@ export function StatsSettingsSection({
 
   const options: Option[] = useMemo(
     () =>
-      (tokensQuery.data ?? []).map((token: TokenItem) => ({
-        value: String(token.id),
-        label: token.name || `#${token.id}`,
-      })),
+      (tokensQuery.data ?? [])
+        .map((token: TokenItem) => ({
+          value: String(token.id),
+          label: token.name || `#${token.id}`,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
     [tokensQuery.data]
   )
 

@@ -171,6 +171,8 @@ func InitOptionMap() {
 	common.OptionMap["ModelRequestRateLimitEnabled"] = strconv.FormatBool(setting.ModelRequestRateLimitEnabled)
 	common.OptionMap["TokenConcurrentLimitEnabled"] = strconv.FormatBool(setting.TokenConcurrentLimitEnabled)
 	common.OptionMap["TokenConcurrentLimitMaxCount"] = strconv.Itoa(setting.TokenConcurrentLimitMaxCount)
+	common.OptionMap["TokenConcurrentLimitRetryAfterSeconds"] = strconv.Itoa(setting.TokenConcurrentLimitRetryAfterSeconds)
+	common.OptionMap["TokenConcurrentLimitModelMaxCountOverrides"] = setting.TokenConcurrentLimitModelMaxCountOverrides2JSONString()
 	common.OptionMap["TokenConcurrentLimitExcludedTokenIds"] = setting.TokenConcurrentLimitExcludedTokenIds
 	common.OptionMap["CheckSensitiveOnPromptEnabled"] = strconv.FormatBool(setting.CheckSensitiveOnPromptEnabled)
 	common.OptionMap["StopOnSensitiveEnabled"] = strconv.FormatBool(setting.StopOnSensitiveEnabled)
@@ -192,12 +194,47 @@ func InitOptionMap() {
 }
 
 func loadOptionsFromDatabase() {
-	options, _ := AllOption()
+	options, err := AllOption()
+	if err != nil {
+		common.SysLog("failed to load options from database: " + err.Error())
+		return
+	}
+	concurrentLimitExcludedSaved := false
 	for _, option := range options {
+		if option.Key == "TokenConcurrentLimitExcludedTokenIds" {
+			concurrentLimitExcludedSaved = true
+		}
 		err := updateOptionMap(option.Key, option.Value)
 		if err != nil {
 			common.SysLog("failed to update option map: " + err.Error())
 		}
+	}
+	if !concurrentLimitExcludedSaved {
+		initDefaultTokenConcurrentLimitExcludedTokenIds()
+	}
+}
+
+// initDefaultTokenConcurrentLimitExcludedTokenIds 首次使用（该选项从未保存过）时，
+// 把名称命中默认关键词（rerank/embed/lobehub，不区分大小写子串匹配）的公共共享
+// 令牌写入并发限制排除列表，与数据看板筛选的默认排除行为一致；此后管理员可自由
+// 修改或清空该列表，保存过的值（包括空值）不会再被默认值覆盖。
+func initDefaultTokenConcurrentLimitExcludedTokenIds() {
+	var tokens []struct {
+		Id   int
+		Name string
+	}
+	if err := DB.Table("tokens").Select("id, name").Find(&tokens).Error; err != nil {
+		common.SysLog("failed to load tokens for concurrent limit excluded defaults: " + err.Error())
+		return
+	}
+	ids := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		if setting.IsTokenConcurrentLimitDefaultExcludedName(token.Name) {
+			ids = append(ids, strconv.Itoa(token.Id))
+		}
+	}
+	if err := UpdateOption("TokenConcurrentLimitExcludedTokenIds", strings.Join(ids, ",")); err != nil {
+		common.SysLog("failed to save default concurrent limit excluded tokens: " + err.Error())
 	}
 }
 
@@ -531,6 +568,10 @@ func updateOptionMap(key string, value string) (err error) {
 		setting.ModelRequestRateLimitSuccessCount, _ = strconv.Atoi(value)
 	case "TokenConcurrentLimitMaxCount":
 		setting.TokenConcurrentLimitMaxCount, _ = strconv.Atoi(value)
+	case "TokenConcurrentLimitRetryAfterSeconds":
+		setting.TokenConcurrentLimitRetryAfterSeconds, _ = strconv.Atoi(value)
+	case "TokenConcurrentLimitModelMaxCountOverrides":
+		err = setting.UpdateTokenConcurrentLimitModelMaxCountOverridesByJSONString(value)
 	case "ModelRequestRateLimitGroup":
 		err = setting.UpdateModelRequestRateLimitGroupByJSONString(value)
 	case "RetryTimes":

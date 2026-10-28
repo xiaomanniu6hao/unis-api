@@ -33,6 +33,15 @@ export interface QuotaDataItem {
   quota?: number
 }
 
+export interface TokenQuotaDataItem {
+  token_id?: number
+  token_name?: string
+  created_at: number
+  token_used?: number
+  count?: number
+  quota?: number
+}
+
 export interface FlowQuotaDataItem {
   user_id?: number
   username?: string
@@ -49,6 +58,8 @@ export interface FlowQuotaDataItem {
 }
 
 export type FlowMetric = 'quota' | 'tokens' | 'requests'
+
+export type UserMetric = FlowMetric
 
 export type FlowOverflowMode = 'aggregate' | 'hide'
 
@@ -189,6 +200,8 @@ export interface DashboardFilters {
   end_timestamp?: Date
   time_granularity?: TimeGranularity
   username?: string
+  // 逗号分隔的令牌 ID 列表，选中的令牌不参与数据统计
+  excluded_token_ids?: string
 }
 
 export type ConsumptionDistributionChartType = 'bar' | 'area'
@@ -208,6 +221,7 @@ export interface UserChartsFilters {
   timeGranularity: TimeGranularity
   selectedRange: number
   topUserLimit: number
+  metric: UserMetric
 }
 
 // ============================================================================
@@ -249,6 +263,11 @@ export interface ProcessedChartData {
 export interface ProcessedUserChartData {
   spec_user_rank: VChartSpec
   spec_user_trend: VChartSpec
+}
+
+export interface ProcessedTokenChartData {
+  spec_token_rank: VChartSpec
+  spec_token_trend: VChartSpec
 }
 
 // ============================================================================

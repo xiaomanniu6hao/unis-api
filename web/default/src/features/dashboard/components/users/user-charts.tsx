@@ -18,33 +18,32 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { useQuery } from '@tanstack/react-query'
 import { VChart } from '@visactor/react-vchart'
-import { Users, Loader2 } from 'lucide-react'
-import { useEffect, useMemo, useState, useRef, useCallback } from 'react'
+import { Users, Loader2, WalletCards, Hash, Activity } from 'lucide-react'
+import { useMemo, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
-import { useTheme } from '@/context/theme-provider'
 import { getUserQuotaDataByUsers } from '@/features/dashboard/api'
 import {
   TIME_GRANULARITY_OPTIONS,
   TIME_RANGE_PRESETS,
 } from '@/features/dashboard/constants'
 import {
+  buildQueryParams,
   getDefaultDays,
   saveGranularity,
   processUserChartData,
 } from '@/features/dashboard/lib'
 import type {
+  DashboardFilters,
   ProcessedUserChartData,
   UserChartsFilters,
+  UserMetric,
 } from '@/features/dashboard/types'
-import { getRollingDateRange, type TimeGranularity } from '@/lib/time'
+import { getRollingDateRange, computeTimeRange, type TimeGranularity } from '@/lib/time'
+import { useChartTheme } from '@/lib/use-chart-theme'
 import { VCHART_OPTION } from '@/lib/vchart'
-
-let themeManagerPromise: Promise<
-  (typeof import('@visactor/vchart'))['ThemeManager']
-> | null = null
 
 const USER_CHARTS: {
   value: string
@@ -63,26 +62,31 @@ const USER_CHARTS: {
   },
 ]
 
+const USER_METRIC_OPTIONS = [
+  { value: 'quota', labelKey: 'By quota', icon: WalletCards },
+  { value: 'tokens', labelKey: 'By tokens', icon: Hash },
+  { value: 'requests', labelKey: 'By requests', icon: Activity },
+] as const
+
 const TOP_USER_LIMIT_OPTIONS = [5, 10, 20, 50]
 
 interface UserChartsProps {
   filters: UserChartsFilters
   onFiltersChange: (filters: UserChartsFilters) => void
+  // 看板级筛选（时间范围、排除令牌等），由筛选对话框维护
+  dashboardFilters?: DashboardFilters
 }
 
 export function UserCharts(props: UserChartsProps) {
   const { t } = useTranslation()
-  const { resolvedTheme } = useTheme()
-  const [themeReady, setThemeReady] = useState(false)
-  const themeManagerRef = useRef<
-    (typeof import('@visactor/vchart'))['ThemeManager'] | null
-  >(null)
+  const { resolvedTheme, themeReady } = useChartTheme()
 
   // The selection is owned by the dashboard parent so it persists across
   // sub-section switches; the rolling window is derived from the chosen range.
   const timeGranularity = props.filters.timeGranularity
   const selectedRange = props.filters.selectedRange
   const topUserLimit = props.filters.topUserLimit
+  const metric = props.filters.metric
   const onFiltersChange = props.onFiltersChange
 
   const timeRange = useMemo(() => {
@@ -92,6 +96,23 @@ export function UserCharts(props: UserChartsProps) {
       end_timestamp: Math.floor(end.getTime() / 1000),
     }
   }, [selectedRange])
+
+  // 筛选对话框选了自定义时间范围时优先使用，否则用滚动窗口
+  const queryParams = useMemo(
+    () =>
+      buildQueryParams(
+        props.dashboardFilters?.start_timestamp ||
+          props.dashboardFilters?.end_timestamp
+          ? computeTimeRange(
+              selectedRange,
+              props.dashboardFilters?.start_timestamp,
+              props.dashboardFilters?.end_timestamp
+            )
+          : timeRange,
+        props.dashboardFilters
+      ),
+    [props.dashboardFilters, selectedRange, timeRange]
+  )
 
   const handleRangeChange = useCallback(
     (days: number) => {
@@ -119,25 +140,16 @@ export function UserCharts(props: UserChartsProps) {
     [onFiltersChange, props.filters]
   )
 
-  useEffect(() => {
-    const updateTheme = async () => {
-      setThemeReady(false)
-      if (!themeManagerPromise) {
-        themeManagerPromise = import('@visactor/vchart').then(
-          (m) => m.ThemeManager
-        )
-      }
-      const ThemeManager = await themeManagerPromise
-      themeManagerRef.current = ThemeManager
-      ThemeManager.setCurrentTheme(resolvedTheme === 'dark' ? 'dark' : 'light')
-      setThemeReady(true)
-    }
-    updateTheme()
-  }, [resolvedTheme])
+  const handleMetricChange = useCallback(
+    (m: UserMetric) => {
+      onFiltersChange({ ...props.filters, metric: m })
+    },
+    [onFiltersChange, props.filters]
+  )
 
   const { data: userData, isLoading } = useQuery({
-    queryKey: ['dashboard', 'user-quota', timeRange],
-    queryFn: () => getUserQuotaDataByUsers(timeRange),
+    queryKey: ['dashboard', 'user-quota', queryParams],
+    queryFn: () => getUserQuotaDataByUsers(queryParams),
     select: (res) => (res.success ? res.data : []),
     staleTime: 60_000,
   })
@@ -148,14 +160,37 @@ export function UserCharts(props: UserChartsProps) {
         isLoading ? [] : (userData ?? []),
         timeGranularity,
         t,
-        topUserLimit
+        topUserLimit,
+        metric
       ),
-    [userData, isLoading, timeGranularity, t, topUserLimit]
+    [userData, isLoading, timeGranularity, t, topUserLimit, metric]
   )
 
   return (
     <div className='space-y-3'>
       <div className='flex items-center gap-1.5 overflow-x-auto pb-1 sm:gap-2'>
+        <Tabs
+          value={metric}
+          onValueChange={(value) => handleMetricChange(value as UserMetric)}
+          className='shrink-0'
+        >
+          <TabsList aria-label={t('Value metric')}>
+            {USER_METRIC_OPTIONS.map((option) => {
+              const Icon = option.icon
+              return (
+                <TabsTrigger
+                  key={option.value}
+                  value={option.value}
+                  className='gap-1.5 px-2.5 text-xs'
+                >
+                  <Icon data-icon='inline-start' aria-hidden='true' />
+                  {t(option.labelKey)}
+                </TabsTrigger>
+              )
+            })}
+          </TabsList>
+        </Tabs>
+
         <Tabs
           value={String(selectedRange)}
           onValueChange={(value) => handleRangeChange(Number(value))}
@@ -241,7 +276,7 @@ export function UserCharts(props: UserChartsProps) {
                   themeReady &&
                   spec && (
                     <VChart
-                      key={`user-${chart.value}-${topUserLimit}-${resolvedTheme}`}
+                      key={`user-${chart.value}-${topUserLimit}-${metric}-${resolvedTheme}`}
                       spec={{
                         ...spec,
                         theme: resolvedTheme === 'dark' ? 'dark' : 'light',

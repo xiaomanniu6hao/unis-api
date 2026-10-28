@@ -18,7 +18,9 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import {
   DASHBOARD_CHART_PREFERENCES_STORAGE_KEY,
+  DASHBOARD_EXCLUDED_TOKEN_IDS_STORAGE_KEY,
   DEFAULT_DASHBOARD_CHART_PREFERENCES,
+  DEFAULT_EXCLUDED_TOKEN_PATTERNS,
   DEFAULT_TIME_GRANULARITY,
   EMPTY_DASHBOARD_FILTERS,
   TIME_GRANULARITY_STORAGE_KEY,
@@ -140,6 +142,41 @@ export function getDefaultDays(granularity?: TimeGranularity): number {
   return TIME_RANGE_BY_GRANULARITY[getSavedGranularity(granularity)]
 }
 
+// 首次使用看板筛选时默认排除的公共共享令牌（按名称子串匹配，不区分大小写），
+// 避免公共 key 的调用量淹没个人统计。
+export function computeDefaultExcludedTokenIds(
+  tokens: { id: number; name: string }[]
+): string[] {
+  return tokens
+    .filter((token) => {
+      const name = (token.name || '').toLowerCase()
+      return DEFAULT_EXCLUDED_TOKEN_PATTERNS.some((pattern) =>
+        name.includes(pattern)
+      )
+    })
+    .map((token) => String(token.id))
+}
+
+// 读取已保存的排除令牌；null 表示从未保存过（需要初始化默认值），
+// 空串表示用户明确保存了"不排除任何令牌"。
+export function getSavedExcludedTokenIds(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    return localStorage.getItem(DASHBOARD_EXCLUDED_TOKEN_IDS_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+export function saveExcludedTokenIds(raw: string): void {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(DASHBOARD_EXCLUDED_TOKEN_IDS_STORAGE_KEY, raw)
+  } catch {
+    // localStorage 不可用时忽略，筛选本身不受影响
+  }
+}
+
 export function buildDefaultDashboardFilters(
   preferences: DashboardChartPreferences = getSavedChartPreferences()
 ): DashboardFilters {
@@ -154,16 +191,24 @@ export function buildDefaultDashboardFilters(
 
 export function buildQueryParams(
   timeRange: { start_timestamp: number; end_timestamp: number },
-  filters?: { time_granularity?: TimeGranularity; username?: string }
+  filters?: {
+    time_granularity?: TimeGranularity
+    username?: string
+    excluded_token_ids?: string
+  }
 ): {
   start_timestamp: number
   end_timestamp: number
   default_time: string
   username?: string
+  excluded_token_ids?: string
 } {
   return {
     ...timeRange,
     default_time: getSavedGranularity(filters?.time_granularity),
     ...(filters?.username && { username: filters.username }),
+    ...(filters?.excluded_token_ids && {
+      excluded_token_ids: filters.excluded_token_ids,
+    }),
   }
 }

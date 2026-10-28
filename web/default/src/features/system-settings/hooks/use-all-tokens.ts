@@ -22,28 +22,23 @@ import { api } from '@/lib/api'
 
 export type TokenItem = { id: number; name: string }
 
-// 后端 page_size 截断到 100，分页循环拉全量，确保排在 100 之后的令牌
-// （如 embed/rerank）也能在排除下拉里出现。
-async function fetchAllTokens(): Promise<TokenItem[]> {
-  const pageSize = 100
-  const result: TokenItem[] = []
-  let page = 1
-  while (page <= 50) {
-    const res = await api.get('/api/token/', {
-      params: { p: page, size: pageSize },
-    })
-    const items = (res.data?.data?.items ?? []) as TokenItem[]
-    result.push(...items)
-    if (items.length < pageSize) break
-    page += 1
+// /api/data/tokens 轻量接口：只返回当前用户自己创建的令牌，
+// 不返回其他用户的令牌。
+async function fetchTokensForSettings(): Promise<TokenItem[]> {
+  const res = await api.get<{
+    success: boolean
+    data?: TokenItem[]
+  }>('/api/data/tokens')
+  if (res.data?.success && Array.isArray(res.data.data)) {
+    return res.data.data
   }
-  return result
+  return []
 }
 
 export function useAllTokens() {
   return useQuery({
     queryKey: ['all-tokens'],
-    queryFn: fetchAllTokens,
+    queryFn: fetchTokensForSettings,
     staleTime: 5 * 60 * 1000,
   })
 }

@@ -25,6 +25,9 @@ export {
   getSavedChartPreferences,
   saveChartPreferences,
   buildDefaultDashboardFilters,
+  computeDefaultExcludedTokenIds,
+  getSavedExcludedTokenIds,
+  saveExcludedTokenIds,
 } from './filters'
 export {
   getLatencyColorClass,
@@ -32,7 +35,11 @@ export {
   openExternalSpeedTest,
   getDefaultPingStatus,
 } from './api-info'
-export { processChartData, processUserChartData } from './charts'
+export {
+  processChartData,
+  processUserChartData,
+  processTokenChartData,
+} from './charts'
 export {
   buildDashboardFlowData,
   buildFlowSankeySpec,

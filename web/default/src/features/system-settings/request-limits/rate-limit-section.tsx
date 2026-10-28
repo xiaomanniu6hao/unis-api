@@ -51,6 +51,7 @@ import {
   type TokenItem,
 } from '../hooks/use-all-tokens'
 import { useUpdateOption } from '../hooks/use-update-option'
+import { ModelConcurrencyEditor } from './model-concurrency-editor'
 import { RateLimitVisualEditor } from './rate-limit-visual-editor'
 
 const isValidJSON = (value: string | undefined) => {
@@ -72,6 +73,23 @@ const isValidJSON = (value: string | undefined) => {
   }
 }
 
+const isValidModelOverridesJSON = (value: string | undefined) => {
+  if (!value || value.trim() === '') return true
+  try {
+    const parsed = JSON.parse(value)
+    if (typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return false
+    }
+    for (const [, val] of Object.entries(parsed)) {
+      if (typeof val !== 'number' || !Number.isInteger(val)) return false
+      if (val < 1 || val > 1000) return false
+    }
+    return true
+  } catch {
+    return false
+  }
+}
+
 const createRateLimitSchema = (t: (key: string) => string) =>
   z.object({
     ModelRequestRateLimitEnabled: z.boolean(),
@@ -86,6 +104,13 @@ const createRateLimitSchema = (t: (key: string) => string) =>
       }),
     TokenConcurrentLimitEnabled: z.boolean(),
     TokenConcurrentLimitMaxCount: z.number().min(1).max(1000),
+    TokenConcurrentLimitRetryAfterSeconds: z.number().min(1).max(3600),
+    TokenConcurrentLimitModelMaxCountOverrides: z
+      .string()
+      .optional()
+      .refine(isValidModelOverridesJSON, {
+        message: t('Invalid JSON format or values out of allowed range'),
+      }),
   })
 
 type RateLimitFormValues = z.infer<ReturnType<typeof createRateLimitSchema>>
@@ -110,10 +135,12 @@ export function RateLimitSection({
 
   const tokenOptions: Option[] = useMemo(
     () =>
-      (tokensQuery.data ?? []).map((token: TokenItem) => ({
-        value: String(token.id),
-        label: token.name || `#${token.id}`,
-      })),
+      (tokensQuery.data ?? [])
+        .map((token: TokenItem) => ({
+          value: String(token.id),
+          label: token.name || `#${token.id}`,
+        }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
     [tokensQuery.data]
   )
 
@@ -323,13 +350,70 @@ export function RateLimitSection({
                     </div>
                   </FormControl>
                   <FormDescription>
-                    {t('Maximum simultaneous in-flight requests per API key')}
+                    {t(
+                      'Default maximum simultaneous in-flight requests per API key, counted separately per model'
+                    )}
+                  </FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name='TokenConcurrentLimitRetryAfterSeconds'
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>{t('Retry wait time')}</FormLabel>
+                  <FormControl>
+                    <div className='flex items-center gap-2'>
+                      <Input
+                        type='number'
+                        min={1}
+                        max={3600}
+                        step={1}
+                        {...field}
+                        onChange={(e) =>
+                          field.onChange(parseInt(e.target.value) || 1)
+                        }
+                      />
+                      <span className='text-muted-foreground text-sm'>
+                        {t('seconds')}
+                      </span>
+                    </div>
+                  </FormControl>
+                  <FormDescription>
+                    {t(
+                      'How long clients should wait before retrying when the concurrency limit is exceeded'
+                    )}
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
           </div>
+
+          <FormField
+            control={form.control}
+            name='TokenConcurrentLimitModelMaxCountOverrides'
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>{t('Per-model concurrency overrides')}</FormLabel>
+                <FormDescription>
+                  {t(
+                    'Override the default concurrency limit for specific models. Models not listed use the default.'
+                  )}
+                </FormDescription>
+                <FormControl>
+                  <ModelConcurrencyEditor
+                    value={field.value || ''}
+                    onChange={field.onChange}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
           <div className='flex min-w-0 flex-col gap-1.5'>
             <label className='text-sm font-medium'>

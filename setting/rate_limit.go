@@ -23,6 +23,15 @@ var ModelRequestRateLimitMutex sync.RWMutex
 var TokenConcurrentLimitEnabled = false
 var TokenConcurrentLimitMaxCount = 2
 
+// TokenConcurrentLimitRetryAfterSeconds 并发超限 429 响应里 Retry-After 头的秒数，
+// 即建议客户端等待多久再重试；小于 1 的配置在中间件里按 1 秒兜底。
+var TokenConcurrentLimitRetryAfterSeconds = 5
+
+// TokenConcurrentLimitModelMaxCountOverrides 按模型覆盖的并发上限（模型名 → 最大并发数，精确匹配），
+// 未覆盖的模型使用 TokenConcurrentLimitMaxCount 默认值。
+var TokenConcurrentLimitModelMaxCountOverrides = map[string]int{}
+var TokenConcurrentLimitModelMaxCountOverridesMutex sync.RWMutex
+
 // TokenConcurrentLimitExcludedTokenIds 并发限制排除的令牌 ID 列表（逗号分隔），
 // 公共令牌（如 rerank、embed、lobehub 共享 key）填入后不受并发限制。
 var TokenConcurrentLimitExcludedTokenIds = ""
@@ -43,6 +52,62 @@ func IsTokenConcurrentLimitExcluded(tokenId int) bool {
 		}
 	}
 	return false
+}
+
+// TokenConcurrentLimitDefaultExcludedPatterns 排除列表首次初始化时按名称子串匹配
+// （不区分大小写）的公共共享令牌关键词，与数据看板筛选的默认排除关键词一致。
+var TokenConcurrentLimitDefaultExcludedPatterns = []string{"rerank", "embed", "lobehub"}
+
+// IsTokenConcurrentLimitDefaultExcludedName 判断令牌名称是否命中默认排除关键词，
+// 用于并发限制排除列表的首次初始化。
+func IsTokenConcurrentLimitDefaultExcludedName(name string) bool {
+	name = strings.ToLower(name)
+	for _, pattern := range TokenConcurrentLimitDefaultExcludedPatterns {
+		if strings.Contains(name, pattern) {
+			return true
+		}
+	}
+	return false
+}
+
+// TokenConcurrentLimitModelMaxCountOverrides2JSONString 导出按模型覆盖的并发上限配置。
+func TokenConcurrentLimitModelMaxCountOverrides2JSONString() string {
+	TokenConcurrentLimitModelMaxCountOverridesMutex.RLock()
+	defer TokenConcurrentLimitModelMaxCountOverridesMutex.RUnlock()
+
+	jsonBytes, err := common.Marshal(TokenConcurrentLimitModelMaxCountOverrides)
+	if err != nil {
+		common.SysLog("error marshalling token concurrent model overrides: " + err.Error())
+	}
+	return string(jsonBytes)
+}
+
+// UpdateTokenConcurrentLimitModelMaxCountOverridesByJSONString 解析并替换按模型覆盖的并发上限配置。
+func UpdateTokenConcurrentLimitModelMaxCountOverridesByJSONString(jsonStr string) error {
+	overrides := make(map[string]int)
+	if err := common.Unmarshal([]byte(jsonStr), &overrides); err != nil {
+		return err
+	}
+	for model, count := range overrides {
+		if count < 1 || count > 1000 {
+			return fmt.Errorf("model %s has invalid concurrency limit: %d", model, count)
+		}
+	}
+	TokenConcurrentLimitModelMaxCountOverridesMutex.Lock()
+	defer TokenConcurrentLimitModelMaxCountOverridesMutex.Unlock()
+	TokenConcurrentLimitModelMaxCountOverrides = overrides
+	return nil
+}
+
+// GetTokenConcurrentLimitMaxCount 返回模型对应的最大并发数：覆盖值优先，未覆盖用默认值。
+func GetTokenConcurrentLimitMaxCount(modelName string) int {
+	TokenConcurrentLimitModelMaxCountOverridesMutex.RLock()
+	count, found := TokenConcurrentLimitModelMaxCountOverrides[modelName]
+	TokenConcurrentLimitModelMaxCountOverridesMutex.RUnlock()
+	if found && count >= 1 {
+		return count
+	}
+	return TokenConcurrentLimitMaxCount
 }
 
 func ModelRequestRateLimitGroup2JSONString() string {

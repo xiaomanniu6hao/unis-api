@@ -18,7 +18,7 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { getRouteApi, useNavigate } from '@tanstack/react-router'
 import { Eye, EyeOff } from 'lucide-react'
-import { useState, useCallback, useMemo, lazy, Suspense } from 'react'
+import { useState, useCallback, useMemo, useEffect, lazy, Suspense } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { SectionPageLayout } from '@/components/layout'
@@ -37,13 +37,17 @@ import { useAuthStore } from '@/stores/auth-store'
 import { ModelsChartPreferences } from './components/models/models-chart-preferences'
 import { ModelsFilter } from './components/models/models-filter-dialog'
 import { OverviewDashboard } from './components/overview/overview-dashboard'
+import { getDataFilterTokens } from './api'
 import { DEFAULT_TIME_GRANULARITY } from './constants'
 import {
   buildDefaultDashboardFilters,
+  computeDefaultExcludedTokenIds,
   getDefaultDays,
   getSavedChartPreferences,
+  getSavedExcludedTokenIds,
   getSavedGranularity,
   saveChartPreferences,
+  saveExcludedTokenIds,
 } from './lib'
 import {
   type DashboardSectionId,
@@ -86,6 +90,12 @@ const LazyPerformanceOverview = lazy(() =>
 const LazyUserCharts = lazy(() =>
   import('./components/users/user-charts').then((m) => ({
     default: m.UserCharts,
+  }))
+)
+
+const LazyTokenCharts = lazy(() =>
+  import('./components/tokens/token-charts').then((m) => ({
+    default: m.TokenCharts,
   }))
 )
 
@@ -161,6 +171,9 @@ const SECTION_META: Record<DashboardSectionId, { titleKey: string }> = {
   users: {
     titleKey: 'User Analytics',
   },
+  tokens: {
+    titleKey: 'Token Analytics',
+  },
 }
 
 export function Dashboard() {
@@ -175,9 +188,14 @@ export function Dashboard() {
   const [dataLoading, setDataLoading] = useState(false)
   const [chartPreferences, setChartPreferences] =
     useState<DashboardChartPreferences>(() => getSavedChartPreferences())
-  const [modelFilters, setModelFilters] = useState<DashboardFilters>(() =>
-    buildDefaultDashboardFilters(getSavedChartPreferences())
-  )
+  const [modelFilters, setModelFilters] = useState<DashboardFilters>(() => {
+    const defaults = buildDefaultDashboardFilters(getSavedChartPreferences())
+    const savedExcluded = getSavedExcludedTokenIds()
+    if (savedExcluded !== null) {
+      defaults.excluded_token_ids = savedExcluded
+    }
+    return defaults
+  })
   const [userChartsFilters, setUserChartsFilters] = useState<UserChartsFilters>(
     () => {
       const granularity = getSavedGranularity()
@@ -185,17 +203,47 @@ export function Dashboard() {
         timeGranularity: granularity,
         selectedRange: getDefaultDays(granularity),
         topUserLimit: 10,
+        metric: 'quota',
       }
     }
   )
   const [flowSensitiveVisible, setFlowSensitiveVisible] = useState(true)
 
-  const handleFilterChange = useCallback((filters: DashboardFilters) => {
-    setModelFilters(filters)
+  // 首次使用（从未保存过排除令牌）时，按令牌名称初始化默认排除列表，
+  // 使首次进入看板的统计数据就不包含公共共享令牌。
+  useEffect(() => {
+    if (getSavedExcludedTokenIds() !== null) return
+    let cancelled = false
+    getDataFilterTokens()
+      .then((res) => {
+        if (cancelled || !res?.success || !Array.isArray(res.data)) return
+        const raw = computeDefaultExcludedTokenIds(res.data).join(',')
+        saveExcludedTokenIds(raw)
+        setModelFilters((prev) =>
+          raw && !prev.excluded_token_ids
+            ? { ...prev, excluded_token_ids: raw }
+            : prev
+        )
+      })
+      .catch(() => {
+        // 拉取失败不保存，下次进入看板时重试初始化
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
+  const handleFilterChange = useCallback((filters: DashboardFilters) => {
+    setModelFilters(filters)
+    saveExcludedTokenIds(filters.excluded_token_ids ?? '')
+  }, [])
+
+  // 排除令牌是持久化配置，重置只恢复时间范围/粒度/用户名
   const handleResetFilters = useCallback(() => {
-    setModelFilters(buildDefaultDashboardFilters(chartPreferences))
+    setModelFilters((prev) => ({
+      ...buildDefaultDashboardFilters(chartPreferences),
+      excluded_token_ids: prev.excluded_token_ids,
+    }))
   }, [chartPreferences])
 
   const handleDataUpdate = useCallback(
@@ -220,7 +268,10 @@ export function Dashboard() {
   const visibleSections = useMemo(
     () =>
       DASHBOARD_SECTION_IDS.filter(
-        (section) => section !== 'overview' && (section !== 'users' || isAdmin)
+        (section) =>
+          section !== 'overview' &&
+          (section !== 'users' || isAdmin) &&
+          (section !== 'tokens' || isAdmin)
       ),
     [isAdmin]
   )
@@ -287,7 +338,19 @@ export function Dashboard() {
         />
       </>
     ) : null
-  const sectionActions = modelActions ?? flowActions
+  const userTokenActions =
+    activeSection === 'users' || activeSection === 'tokens' ? (
+      <ModelsFilter
+        preferences={chartPreferences}
+        currentFilters={modelFilters}
+        onFilterChange={handleFilterChange}
+        onReset={handleResetFilters}
+        titleKey='User Analytics Filters'
+        descriptionKey='Filter the analytics view by time range and user.'
+      />
+    ) : null
+  const sectionActions =
+    modelActions ?? flowActions ?? userTokenActions
 
   return (
     <SectionPageLayout>
@@ -368,6 +431,18 @@ export function Dashboard() {
                 <LazyUserCharts
                   filters={userChartsFilters}
                   onFiltersChange={setUserChartsFilters}
+                  dashboardFilters={modelFilters}
+                />
+              </Suspense>
+            </FadeIn>
+          )}
+          {activeSection === 'tokens' && (
+            <FadeIn>
+              <Suspense fallback={<ModelChartsFallback />}>
+                <LazyTokenCharts
+                  filters={userChartsFilters}
+                  onFiltersChange={setUserChartsFilters}
+                  dashboardFilters={modelFilters}
                 />
               </Suspense>
             </FadeIn>

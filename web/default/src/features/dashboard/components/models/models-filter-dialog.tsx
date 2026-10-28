@@ -17,11 +17,12 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.
 For commercial licensing, please contact support@quantumnous.com
 */
 import { Filter, RotateCcw, Calendar, Search } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
 import { DateTimePicker } from '@/components/datetime-picker'
 import { Dialog } from '@/components/dialog'
+import { MultiSelect, type Option } from '@/components/multi-select'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -38,6 +39,7 @@ import {
   TIME_GRANULARITY_OPTIONS,
   TIME_RANGE_PRESETS,
 } from '@/features/dashboard/constants'
+import { getDataFilterTokens } from '@/features/dashboard/api'
 import {
   buildDefaultDashboardFilters,
   cleanFilters,
@@ -82,6 +84,20 @@ function detectQuickRangeDays(
   return TIME_RANGE_PRESETS.some((preset) => preset.days === days) ? days : null
 }
 
+// 把逗号分隔的 id 字符串拆成去重的 id 字符串数组
+function parseIdList(raw: string | undefined): string[] {
+  if (!raw) return []
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const part of raw.split(',')) {
+    const id = part.trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    result.push(id)
+  }
+  return result
+}
+
 /**
  * Section divider component for better visual organization
  */
@@ -110,6 +126,37 @@ export function ModelsFilter(props: ModelsFilterProps) {
   const [selectedRange, setSelectedRange] = useState<number | null>(() =>
     detectQuickRangeDays(props.currentFilters)
   )
+  const [tokenOptions, setTokenOptions] = useState<Option[]>([])
+  const [excludedTokenIds, setExcludedTokenIds] = useState<string[]>(() =>
+    parseIdList(props.currentFilters?.excluded_token_ids)
+  )
+
+  // 打开对话框时拉取令牌列表（轻量 id+name，只含当前用户自己的令牌）
+  useEffect(() => {
+    if (!open || tokenOptions.length > 0) return
+    getDataFilterTokens()
+      .then((res) => {
+        if (res?.success && Array.isArray(res.data)) {
+          const options = res.data.map((token) => ({
+            value: String(token.id),
+            label: token.name || `#${token.id}`,
+          }))
+          // 按名称字母序排列，方便查找
+          options.sort((a, b) => a.label.localeCompare(b.label))
+          setTokenOptions(options)
+        }
+      })
+      .catch(() => {
+        // 拉取失败保持空列表，筛选仍可用（只是无法选择令牌）
+      })
+  }, [open, tokenOptions.length])
+
+  // 每次打开对话框时同步已应用的排除令牌
+  useEffect(() => {
+    if (open) {
+      setExcludedTokenIds(parseIdList(props.currentFilters?.excluded_token_ids))
+    }
+  }, [open, props.currentFilters?.excluded_token_ids])
 
   const handleOpenChange = (nextOpen: boolean) => {
     // Sync the editing state from the applied filters every time the dialog
@@ -125,9 +172,10 @@ export function ModelsFilter(props: ModelsFilterProps) {
 
   const handleApply = () => {
     props.onFilterChange(
-      cleanFilters(
-        filters as unknown as Record<string, unknown>
-      ) as typeof filters
+      cleanFilters({
+        ...filters,
+        excluded_token_ids: excludedTokenIds.join(','),
+      } as unknown as Record<string, unknown>) as typeof filters
     )
     setOpen(false)
   }
@@ -141,6 +189,7 @@ export function ModelsFilter(props: ModelsFilterProps) {
       end_timestamp: end,
     })
     setSelectedRange(days)
+    // 排除令牌是持久化配置，重置不清空
     props.onReset()
     setOpen(false)
   }
@@ -299,6 +348,25 @@ export function ModelsFilter(props: ModelsFilterProps) {
               </div>
             </>
           )}
+
+          <SectionDivider label={t('Token Filter')} />
+
+          <div className='grid gap-2'>
+            <Label>{t('Excluded Tokens')}</Label>
+            <p className='text-muted-foreground text-xs'>
+              {t(
+                'Selected tokens are excluded from dashboard statistics. Leave empty to include all tokens.'
+              )}
+            </p>
+            <MultiSelect
+              options={tokenOptions}
+              selected={excludedTokenIds}
+              onChange={setExcludedTokenIds}
+              placeholder={t('Select tokens to exclude...')}
+              className='w-full'
+              maxVisibleChips={10}
+            />
+          </div>
         </div>
       </ScrollArea>
     </Dialog>

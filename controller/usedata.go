@@ -32,7 +32,8 @@ func GetAllQuotaDates(c *gin.Context) {
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
 	username := c.Query("username")
-	dates, err := model.GetAllQuotaDates(startTimestamp, endTimestamp, username)
+	excludedTokenIds := model.ParseExcludedTokenIds(c.Query("excluded_token_ids"))
+	dates, err := model.GetAllQuotaDates(startTimestamp, endTimestamp, username, excludedTokenIds)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -48,7 +49,26 @@ func GetAllQuotaDates(c *gin.Context) {
 func GetQuotaDatesByUser(c *gin.Context) {
 	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
 	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
-	dates, err := model.GetQuotaDataGroupByUser(startTimestamp, endTimestamp)
+	excludedTokenIds := model.ParseExcludedTokenIds(c.Query("excluded_token_ids"))
+	dates, err := model.GetQuotaDataGroupByUser(startTimestamp, endTimestamp, excludedTokenIds)
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    dates,
+	})
+}
+
+// GetQuotaDatesByToken 令牌统计：按令牌聚合当前用户自己的 quota_data。
+func GetQuotaDatesByToken(c *gin.Context) {
+	userId := c.GetInt("id")
+	startTimestamp, _ := strconv.ParseInt(c.Query("start_timestamp"), 10, 64)
+	endTimestamp, _ := strconv.ParseInt(c.Query("end_timestamp"), 10, 64)
+	excludedTokenIds := model.ParseExcludedTokenIds(c.Query("excluded_token_ids"))
+	dates, err := model.GetQuotaDataGroupByToken(userId, startTimestamp, endTimestamp, excludedTokenIds)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -91,7 +111,8 @@ func GetAllFlowQuotaDates(c *gin.Context) {
 		return
 	}
 	username := c.Query("username")
-	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, username, 0, c.GetInt("role"))
+	excludedTokenIds := model.ParseExcludedTokenIds(c.Query("excluded_token_ids"))
+	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, username, 0, c.GetInt("role"), excludedTokenIds)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -117,7 +138,8 @@ func GetUserFlowQuotaDates(c *gin.Context) {
 		})
 		return
 	}
-	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, "", userId, common.RoleCommonUser)
+	excludedTokenIds := model.ParseExcludedTokenIds(c.Query("excluded_token_ids"))
+	dates, err := model.GetFlowQuotaData(startTimestamp, endTimestamp, "", userId, common.RoleCommonUser, excludedTokenIds)
 	if err != nil {
 		common.ApiError(c, err)
 		return
@@ -128,4 +150,24 @@ func GetUserFlowQuotaDates(c *gin.Context) {
 		"data":    dates,
 	})
 	return
+}
+
+// GetAllTokensForDataFilter 供数据看板筛选使用：返回 id+name 轻量列表。
+// 只返回当前用户自己创建的令牌，不返回其他用户的令牌。
+func GetAllTokensForDataFilter(c *gin.Context) {
+	userId := c.GetInt("id")
+	var tokens []struct {
+		Id   int    `json:"id"`
+		Name string `json:"name"`
+	}
+	err := model.DB.Table("tokens").Select("id, name").Where("user_id = ?", userId).Order("id asc").Find(&tokens).Error
+	if err != nil {
+		common.ApiError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "",
+		"data":    tokens,
+	})
 }
