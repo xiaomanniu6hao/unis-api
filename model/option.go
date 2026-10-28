@@ -199,42 +199,49 @@ func loadOptionsFromDatabase() {
 		common.SysLog("failed to load options from database: " + err.Error())
 		return
 	}
-	concurrentLimitExcludedSaved := false
+	concurrentLimitDefaultsApplied := false
 	for _, option := range options {
-		if option.Key == "TokenConcurrentLimitExcludedTokenIds" {
-			concurrentLimitExcludedSaved = true
+		if option.Key == "TokenConcurrentLimitExcludedDefaultsApplied" {
+			concurrentLimitDefaultsApplied = true
 		}
 		err := updateOptionMap(option.Key, option.Value)
 		if err != nil {
 			common.SysLog("failed to update option map: " + err.Error())
 		}
 	}
-	if !concurrentLimitExcludedSaved {
+	if !concurrentLimitDefaultsApplied {
 		initDefaultTokenConcurrentLimitExcludedTokenIds()
 	}
 }
 
-// initDefaultTokenConcurrentLimitExcludedTokenIds 首次使用（该选项从未保存过）时，
-// 把名称命中默认关键词（rerank/embed/lobehub，不区分大小写子串匹配）的公共共享
-// 令牌写入并发限制排除列表，与数据看板筛选的默认排除行为一致；此后管理员可自由
-// 修改或清空该列表，保存过的值（包括空值）不会再被默认值覆盖。
+// initDefaultTokenConcurrentLimitExcludedTokenIds 并发限制排除列表的一次性默认初始化：
+// 首次部署本逻辑时（标记选项不存在），若排除列表为空（含历史部署中保存过空值的情况），
+// 把名称命中默认关键词（rerank/embed/lobehub，不区分大小写子串匹配）的公共共享令牌
+// 写入排除列表，与数据看板筛选的默认排除行为一致；随后写入标记，之后管理员修改或
+// 清空该列表都不会再被默认值覆盖。查询或保存失败时不写标记，下次同步自动重试。
 func initDefaultTokenConcurrentLimitExcludedTokenIds() {
-	var tokens []struct {
-		Id   int
-		Name string
-	}
-	if err := DB.Table("tokens").Select("id, name").Find(&tokens).Error; err != nil {
-		common.SysLog("failed to load tokens for concurrent limit excluded defaults: " + err.Error())
-		return
-	}
-	ids := make([]string, 0, len(tokens))
-	for _, token := range tokens {
-		if setting.IsTokenConcurrentLimitDefaultExcludedName(token.Name) {
-			ids = append(ids, strconv.Itoa(token.Id))
+	if setting.TokenConcurrentLimitExcludedTokenIds == "" {
+		var tokens []struct {
+			Id   int
+			Name string
+		}
+		if err := DB.Table("tokens").Select("id, name").Find(&tokens).Error; err != nil {
+			common.SysLog("failed to load tokens for concurrent limit excluded defaults: " + err.Error())
+			return
+		}
+		ids := make([]string, 0, len(tokens))
+		for _, token := range tokens {
+			if setting.IsTokenConcurrentLimitDefaultExcludedName(token.Name) {
+				ids = append(ids, strconv.Itoa(token.Id))
+			}
+		}
+		if err := UpdateOption("TokenConcurrentLimitExcludedTokenIds", strings.Join(ids, ",")); err != nil {
+			common.SysLog("failed to save default concurrent limit excluded tokens: " + err.Error())
+			return
 		}
 	}
-	if err := UpdateOption("TokenConcurrentLimitExcludedTokenIds", strings.Join(ids, ",")); err != nil {
-		common.SysLog("failed to save default concurrent limit excluded tokens: " + err.Error())
+	if err := UpdateOption("TokenConcurrentLimitExcludedDefaultsApplied", "true"); err != nil {
+		common.SysLog("failed to mark concurrent limit excluded defaults: " + err.Error())
 	}
 }
 
