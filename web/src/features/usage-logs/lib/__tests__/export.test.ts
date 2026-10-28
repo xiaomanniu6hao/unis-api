@@ -48,6 +48,7 @@ const consumeLog: UsageLog = {
   }),
   request_id: 'req-1',
   upstream_request_id: '',
+  user_input: '',
 }
 
 async function chineseTranslator() {

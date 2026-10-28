@@ -71,6 +71,7 @@ function makeLog(other: LogOtherData, type = 2): UsageLog {
     other: JSON.stringify(other),
     request_id: 'req-1',
     upstream_request_id: '',
+    user_input: '',
   }
 }
 

@@ -888,7 +888,7 @@ export function ChannelRuntimeSection(props: Props) {
             {limits
               .map(
                 (item) =>
-                  `#${item.channel_id}/${item.model_name || '*'}=${item.max_batch}(${item.source})`
+                  `#${item.channel_id}=${item.max_batch}(${item.source})`
               )
               .join('  ')}
           </div>

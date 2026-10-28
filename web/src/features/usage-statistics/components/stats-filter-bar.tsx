@@ -137,7 +137,9 @@ export function StatsFilterBar({
           </label>
           <Select
             value={value.groupBy}
-            onValueChange={(v) => onChange({ ...value, groupBy: v })}
+            onValueChange={(v) => {
+              if (v !== null) onChange({ ...value, groupBy: v })
+            }}
           >
             <SelectTrigger className='h-8 w-[140px]'>
               <SelectValue />

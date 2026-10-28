@@ -42,6 +42,7 @@ function Fixture() {
         <LogSettingsSection
           defaultValues={{
             LogConsumeEnabled: true,
+            LogUserInputEnabled: false,
             'log_setting.user_export_enabled': true,
             'log_setting.max_range_days': 30,
           }}
@@ -90,9 +91,13 @@ test('the page shows the four log modules in order, each with its own controls',
     'Server Log Management',
   ])
   const recording = screen.getByRole('group', { name: 'Log recording' })
-  expect(within(recording).getAllByRole('switch')).toHaveLength(1)
+  // 定制项「记录用户输入」与「记录额度消耗」并列在日志记录模块内。
+  expect(within(recording).getAllByRole('switch')).toHaveLength(2)
   expect(
     within(recording).getByRole('switch', { name: 'Record quota usage' })
+  ).toBeVisible()
+  expect(
+    within(recording).getByRole('switch', { name: 'Record user input' })
   ).toBeVisible()
   const search = screen.getByRole('group', { name: 'Log search and export' })
   expect(

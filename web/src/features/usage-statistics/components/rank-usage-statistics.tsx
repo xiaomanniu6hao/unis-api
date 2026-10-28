@@ -39,7 +39,6 @@ import {
   getRankUsageStats,
   getStatsTokens,
   useIsAdmin,
-  type UsageStatisticsItem,
 } from '../api'
 import { StatsFilterBar } from './stats-filter-bar'
 import type { StatsFilterValues } from './stats-filter-bar'
