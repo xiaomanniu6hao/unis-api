@@ -249,6 +249,14 @@ func ResetChannelRuntimeStates() {
 	channelRuntimeState = make(map[int]*ChannelRuntimeState)
 }
 
+// ClearChannelRuntimeState 丢弃单个渠道的内存态：渠道被移出采集范围后，
+// 残留状态（尤其是饱和锁）必须一起清掉，否则会一直跳过该渠道。
+func ClearChannelRuntimeState(channelId int) {
+	channelRuntimeLock.Lock()
+	defer channelRuntimeLock.Unlock()
+	delete(channelRuntimeState, channelId)
+}
+
 // GetChannelRuntimeStates 返回全部渠道当前运行时状态的快照。
 func GetChannelRuntimeStates() []ChannelRuntimeState {
 	channelRuntimeLock.RLock()
@@ -482,12 +490,12 @@ func DeleteChannelRuntimeSamplesBefore(cutoffTs int64) error {
 	return DB.Where("collected_at < ?", cutoffTs).Delete(&ChannelRuntimeSample{}).Error
 }
 
-// ChannelRuntimeRetentionCutoff 计算保留期截止时间戳。
-func ChannelRuntimeRetentionCutoff(hours int) int64 {
-	if hours <= 0 {
-		hours = operation_setting.DefaultSampleRetentionHours
+// ChannelRuntimeRetentionCutoff 计算保留期截止时间戳（按月，1 个月 = 一个自然月）。
+func ChannelRuntimeRetentionCutoff(months int) int64 {
+	if months <= 0 {
+		months = operation_setting.DefaultSampleRetentionMonths
 	}
-	return time.Now().Add(-time.Duration(hours) * time.Hour).Unix()
+	return time.Now().AddDate(0, -months, 0).Unix()
 }
 
 // ChannelMeta 是渠道的轻量元信息，供运行时/资源分析展示使用（不含密钥）。
@@ -509,12 +517,22 @@ func GetChannelRuntimeMeta() ([]ChannelMeta, error) {
 	return metas, err
 }
 
+// GetChannelIdByName 按渠道名精确查找渠道 id（长度分流按渠道名配置，调度需要 id）。
+// 未找到时返回 (0, nil)，由调用方按「不存在」处理。
+func GetChannelIdByName(name string) (int, error) {
+	var channel Channel
+	err := DB.Select("id").Where("name = ?", name).Limit(1).Find(&channel).Error
+	if err != nil {
+		return 0, err
+	}
+	return channel.Id, nil
+}
+
 // ChannelUsageSummary 是某渠道在时间窗内的调用汇总（来自 logs 表）。
 type ChannelUsageSummary struct {
 	ChannelId        int     `json:"channel_id"`
 	Requests         int64   `json:"requests"`
 	ErrorRequests    int64   `json:"error_requests"`
-	Quota            int64   `json:"quota"`
 	PromptTokens     int64   `json:"prompt_tokens"`
 	CompletionTokens int64   `json:"completion_tokens"`
 	AvgUseTimeMs     float64 `json:"avg_use_time_ms"`
@@ -526,7 +544,7 @@ func SumChannelUsageByWindow(startTs int64, endTs int64) (map[int]ChannelUsageSu
 
 	var consumeRows []ChannelUsageSummary
 	err := LOG_DB.Table("logs").
-		Select("channel_id, count(*) AS requests, COALESCE(sum(quota), 0) AS quota, "+
+		Select("channel_id, count(*) AS requests, "+
 			"COALESCE(sum(prompt_tokens), 0) AS prompt_tokens, "+
 			"COALESCE(sum(completion_tokens), 0) AS completion_tokens, "+
 			"COALESCE(avg(use_time), 0) * 1000 AS avg_use_time_ms").

@@ -1,11 +1,12 @@
 package service
 
 import (
-	"regexp"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/QuantumNous/new-api/common"
+	"github.com/QuantumNous/new-api/model"
 	"github.com/QuantumNous/new-api/setting/operation_setting"
 
 	"github.com/gin-gonic/gin"
@@ -15,58 +16,73 @@ import (
 // 超过上限的请求体一定属于超长上下文，直接按「无上界」档处理，避免为超大体做无谓遍历。
 const lengthRouteMaxBodyBytes = 8 << 20
 
-var lengthRouteRegexCache sync.Map // pattern -> *regexp.Regexp
+// lengthRouteChannelCacheTTL 控制「渠道名 → id」解析结果的缓存时长：
+// 避免每个请求都查库，同时让渠道重命名/删除在一分钟内生效。
+const lengthRouteChannelCacheTTL = 60 * time.Second
 
-func compileLengthRouteRegex(pattern string) *regexp.Regexp {
-	if compiled, ok := lengthRouteRegexCache.Load(pattern); ok {
-		re, _ := compiled.(*regexp.Regexp)
-		return re
+type lengthRouteChannelRef struct {
+	id      int
+	expires time.Time
+}
+
+var lengthRouteChannelCache sync.Map // lower(channel_name) -> lengthRouteChannelRef
+
+// resolveLengthRouteChannelId 把规则里的渠道名解析成渠道 id（带 TTL 缓存，未命中不缓存）。
+func resolveLengthRouteChannelId(channelName string) (int, bool) {
+	name := strings.TrimSpace(channelName)
+	if name == "" {
+		return 0, false
 	}
-	re, err := regexp.Compile(pattern)
+	key := strings.ToLower(name)
+	if cached, ok := lengthRouteChannelCache.Load(key); ok {
+		ref, _ := cached.(lengthRouteChannelRef)
+		if time.Now().Before(ref.expires) {
+			return ref.id, ref.id > 0
+		}
+	}
+	id, err := model.GetChannelIdByName(name)
 	if err != nil {
-		common.SysError("invalid length routing model_regex: " + pattern)
-		re = nil
+		common.SysError("length routing: resolve channel " + name + " failed: " + err.Error())
+		return 0, false
 	}
-	lengthRouteRegexCache.Store(pattern, re)
-	return re
+	if id <= 0 {
+		return 0, false
+	}
+	lengthRouteChannelCache.Store(key, lengthRouteChannelRef{
+		id:      id,
+		expires: time.Now().Add(lengthRouteChannelCacheTTL),
+	})
+	return id, true
 }
 
-// matchLengthRouteRule 返回第一个启用且模型正则命中的长度分流规则。
-func matchLengthRouteRule(setting *operation_setting.ChannelRuntimeSetting, modelName string) *operation_setting.ChannelLengthRouteRule {
+// matchLengthRoute 找出该模型在该输入长度下最具体的规则：区间下界最大的那条。
+// 这样 [0,0]（全量兜底）和 [10000,0]（长上下文专用）同时存在时，长请求优先走专用渠道。
+func matchLengthRoute(
+	setting *operation_setting.ChannelRuntimeSetting,
+	modelName string,
+	length int,
+) *operation_setting.ChannelLengthRoute {
+	var matched *operation_setting.ChannelLengthRoute
 	for i := range setting.LengthRoutingRules {
-		rule := &setting.LengthRoutingRules[i]
-		if !rule.Enabled || len(rule.Segments) == 0 {
+		route := &setting.LengthRoutingRules[i]
+		if !route.Enabled || strings.TrimSpace(route.ChannelName) == "" {
 			continue
 		}
-		if len(rule.ModelRegex) == 0 {
+		routeModel := strings.TrimSpace(route.ModelName)
+		if routeModel != "" && !strings.EqualFold(routeModel, modelName) {
 			continue
 		}
-		for _, pattern := range rule.ModelRegex {
-			pattern = strings.TrimSpace(pattern)
-			if pattern == "" {
-				continue
-			}
-			if re := compileLengthRouteRegex(pattern); re != nil && re.MatchString(modelName) {
-				return rule
-			}
+		if length < route.MinLength {
+			continue
+		}
+		if route.MaxLength > 0 && length >= route.MaxLength {
+			continue
+		}
+		if matched == nil || route.MinLength > matched.MinLength {
+			matched = route
 		}
 	}
-	return nil
-}
-
-// pickLengthSegment 找出输入长度落在哪个区间。区间为 [MinLength, MaxLength)，MaxLength <= 0 表示无上界。
-func pickLengthSegment(rule *operation_setting.ChannelLengthRouteRule, length int) (*operation_setting.ChannelLengthSegment, bool) {
-	for i := range rule.Segments {
-		segment := &rule.Segments[i]
-		if length < segment.MinLength {
-			continue
-		}
-		if segment.MaxLength > 0 && length >= segment.MaxLength {
-			continue
-		}
-		return segment, true
-	}
-	return nil, false
+	return matched
 }
 
 // estimateRequestInputLength 估算请求输入的 prompt token 数（长度单位固定为 token）。
@@ -98,17 +114,17 @@ func ResolveLengthRouteChannelIds(c *gin.Context, modelName string) ([]int, bool
 	}
 	operation_setting.NormalizeChannelRuntimeSetting(setting)
 
-	rule := matchLengthRouteRule(setting, modelName)
-	if rule == nil {
-		return nil, false
-	}
 	length, ok := estimateRequestInputLength(c, modelName)
 	if !ok {
 		return nil, false
 	}
-	segment, ok := pickLengthSegment(rule, length)
-	if !ok || len(segment.ChannelIds) == 0 {
+	route := matchLengthRoute(setting, modelName, length)
+	if route == nil {
 		return nil, false
 	}
-	return segment.ChannelIds, true
+	channelId, ok := resolveLengthRouteChannelId(route.ChannelName)
+	if !ok {
+		return nil, false
+	}
+	return []int{channelId}, true
 }

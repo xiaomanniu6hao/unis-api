@@ -106,11 +106,14 @@ func runChannelRuntimeCollection() {
 	var limits []model.ChannelRuntimeLimit
 
 	for _, channelId := range channelIds {
-		if !setting.ShouldScrapeChannel(channelId) {
-			continue
-		}
 		channel, err := model.CacheGetChannel(channelId)
 		if err != nil || channel == nil {
+			continue
+		}
+		// 采集范围 = 后台配了最大 batch 的渠道；没配的渠道不产生任何请求，保持原有调度逻辑。
+		// 移出采集范围时要顺手清掉内存态，否则历史锁定会让该渠道一直被跳过。
+		if !setting.IsChannelCollected(channel.Name) {
+			model.ClearChannelRuntimeState(channel.Id)
 			continue
 		}
 		channelSamples, channelLimits, scrapeErr := collectChannelRuntime(channel, setting, collectedAt)
@@ -147,7 +150,7 @@ func maybeCleanupChannelRuntimeSamples(setting *operation_setting.ChannelRuntime
 	if !channelRuntimeLastCleanup.CompareAndSwap(last, now) {
 		return
 	}
-	cutoff := model.ChannelRuntimeRetentionCutoff(setting.SampleRetentionHours)
+	cutoff := model.ChannelRuntimeRetentionCutoff(setting.SampleRetentionMonths)
 	if err := model.DeleteChannelRuntimeSamplesBefore(cutoff); err != nil {
 		common.SysError("channel runtime: cleanup samples failed: " + err.Error())
 	}
@@ -201,7 +204,7 @@ func collectChannelRuntime(
 	if metricsURL == "" {
 		return nil, nil, fmt.Errorf("base_url 为空，无法推导 metrics 地址")
 	}
-	body, err := fetchMetricsText(metricsURL, setting.ScrapeTimeoutMs)
+	body, err := fetchMetricsText(metricsURL, setting.ScrapeTimeoutSeconds)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -299,8 +302,11 @@ func runtimeMetricsURL(channel *model.Channel) string {
 	return fmt.Sprintf("%s://%s%s", scheme, parsed.Host, runtimeMetricsPath)
 }
 
-func fetchMetricsText(metricsURL string, timeoutMs int) (string, error) {
-	client := &http.Client{Timeout: time.Duration(timeoutMs) * time.Millisecond}
+func fetchMetricsText(metricsURL string, timeoutSeconds int) (string, error) {
+	if timeoutSeconds <= 0 {
+		timeoutSeconds = operation_setting.DefaultScrapeTimeoutSeconds
+	}
+	client := &http.Client{Timeout: time.Duration(timeoutSeconds) * time.Second}
 	req, err := http.NewRequest(http.MethodGet, metricsURL, nil)
 	if err != nil {
 		return "", err

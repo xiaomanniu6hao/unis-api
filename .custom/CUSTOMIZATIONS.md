@@ -115,13 +115,20 @@
   - `model/channel_runtime.go` — 3 张表：`channel_runtime_samples`（时间序列）、`channel_runtime_limits`（渠道最大 batch）、`channel_runtime_state`（锁状态）
   - `service/channel_runtime_monitor.go` — 每 5s 抓取渠道 base_url 同源 `/metrics`，落库 Running/Waiting/max_batch，并按阈值上锁/解锁
   - `service/channel_length_routing.go` — 按 prompt tokens 阈值把请求约束到指定渠道
-  - `controller/channel_runtime.go` — 状态/样本/上限/刷新/解锁/资源统计 6 个 API
+  - `controller/channel_runtime.go` — 状态/样本/上限/刷新/解锁/资源统计/渠道清单 7 个 API
   - `web/default/src/features/dashboard/components/channels/` — 看板「渠道资源分析」（调用量 + 拥挤度）
   - `web/default/src/features/system-settings/general/channel-runtime/` — 配置页
   - `docs/channel-runtime-monitor.md` — 设计与排障文档
 - **核心文件**: `main.go`（启动采集器）、`model/main.go`（AutoMigrate）、`router/api-router.go`（`/api/channel_runtime/*` 路由组）、`middleware/distributor.go` + `service/channel_select.go` + `model/channel_cache.go` + `model/ability.go` + `constant/context_key.go`（长度路由约束）、`features/dashboard/{api.ts,index.tsx,section-registry.tsx}`、`features/system-settings/{types.ts,models/section-registry.tsx}`、`i18n/locales/zh.json`
 - **依赖**: vLLM 侧暴露 `vllm:num_requests_running/num_requests_waiting`；max_batch 优先级 渠道名手工配置 > `max_num_seqs` > 默认 4
-- **注意**: `enabled` 默认 false，不配置即完全走原有调度逻辑；样本保留默认 8760h（SQLite 部署建议调小到 720h）
+- **注意**: `enabled` 默认 false，不配置即完全走原有调度逻辑；样本保留默认 12 个月（SQLite 部署建议调小到 1 个月）
+- **二次优化（同日）**:
+  - 采集超时改 **秒**（`scrape_timeout_seconds`，默认 3，1~30）；样本保留改 **月**（`sample_retention_months`，默认 12，上限 12）
+  - 删除 `scrape_only_channels` 白名单：**采集范围 = 最大 batch 表里列出的渠道**（`IsChannelCollected`），移出范围时清内存锁状态
+  - 配置页默认铺出环境全部渠道（`GET /api/channel_runtime/channels`，不含 key），最大 batch 默认 4；无渠道时展示 `example-channel` 示例行
+  - 长度分离改为扁平表 `{model_name, channel_name, min_length, max_length, enabled}`，区间 `[0,0]` 表示无上限，**下界最大者优先**；渠道名→id 解析带 60s TTL 缓存
+  - 看板「按渠道调用情况」去掉「额度」列（后端不再聚合 quota）
+  - 旧键 `scrape_timeout_ms` / `sample_retention_hours` / `scrape_only_channels` / 旧 `length_routing_rules`（regex+segments 格式）升级后失效，需重新配置
 - **回滚**: 删新增文件 + 停用 `main.go` 中 `StartChannelRuntimeMonitor()` + 撤路由组与 AutoMigrate 注册
 
 ---

@@ -243,10 +243,9 @@ export type ModelSettings = {
   'channel_affinity_setting.rules': string
   'channel_runtime_setting.enabled': boolean
   'channel_runtime_setting.scrape_interval_seconds': number
-  'channel_runtime_setting.scrape_timeout_ms': number
-  'channel_runtime_setting.sample_retention_hours': number
+  'channel_runtime_setting.scrape_timeout_seconds': number
+  'channel_runtime_setting.sample_retention_months': number
   'channel_runtime_setting.default_max_batch': number
-  'channel_runtime_setting.scrape_only_channels': string
   'channel_runtime_setting.max_batch_overrides': string
   'channel_runtime_setting.saturation_lock_enabled': boolean
   'channel_runtime_setting.saturation_waiting_samples': number

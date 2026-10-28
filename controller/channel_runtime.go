@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/QuantumNous/new-api/model"
@@ -121,6 +122,40 @@ func GetChannelRuntimeLimits(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": limits})
 }
 
+// channelRuntimeChannelItem 是配置页用来「默认列出全部渠道」的轻量条目。
+type channelRuntimeChannelItem struct {
+	Id     int      `json:"id"`
+	Name   string   `json:"name"`
+	Models []string `json:"models"`
+	Status int      `json:"status"`
+}
+
+// GetChannelRuntimeChannels 返回环境中的全部渠道（不含密钥），
+// 供配置页把最大 batch / 长度分离的默认行预填成真实渠道。
+func GetChannelRuntimeChannels(c *gin.Context) {
+	metas, err := model.GetChannelRuntimeMeta()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	items := make([]channelRuntimeChannelItem, 0, len(metas))
+	for _, meta := range metas {
+		channelModels := make([]string, 0)
+		for _, name := range strings.Split(meta.Models, ",") {
+			if name = strings.TrimSpace(name); name != "" {
+				channelModels = append(channelModels, name)
+			}
+		}
+		items = append(items, channelRuntimeChannelItem{
+			Id:     meta.Id,
+			Name:   meta.Name,
+			Models: channelModels,
+			Status: meta.Status,
+		})
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": items})
+}
+
 // RefreshChannelRuntime 立即触发一次采集。
 func RefreshChannelRuntime(c *gin.Context) {
 	service.TriggerChannelRuntimeCollection()
@@ -215,7 +250,6 @@ func GetChannelResourceStats(c *gin.Context) {
 		if summary, ok := usage[meta.Id]; ok {
 			item.Requests = summary.Requests
 			item.ErrorRequests = summary.ErrorRequests
-			item.Quota = summary.Quota
 			item.PromptTokens = summary.PromptTokens
 			item.CompletionTokens = summary.CompletionTokens
 			item.TotalTokens = summary.PromptTokens + summary.CompletionTokens

@@ -7,7 +7,6 @@ export interface ChannelResourceItem {
   requests: number
   error_requests: number
   error_rate: number
-  quota: number
   prompt_tokens: number
   completion_tokens: number
   total_tokens: number

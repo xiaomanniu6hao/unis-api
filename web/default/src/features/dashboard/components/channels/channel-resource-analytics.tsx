@@ -5,7 +5,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { getChannelResourceStats } from '@/features/dashboard/api'
 import type { ChannelResourceItem } from '@/features/dashboard/components/channels/types'
 import { toIntlLocale } from '@/i18n/languages'
-import { formatCompactNumber, formatQuota } from '@/lib/format'
+import { formatCompactNumber } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 interface Props {
@@ -130,7 +130,7 @@ export function ChannelResourceAnalytics(props: Props) {
               {t('Channel call volume')}
             </h3>
             <p className='text-muted-foreground mt-0.5 text-xs'>
-              {t('Requests, errors and consumption aggregated per channel.')}
+              {t('Requests, errors and latency aggregated per channel.')}
             </p>
           </div>
           <div className='bg-muted/60 flex items-center gap-1 rounded-md p-0.5'>
@@ -153,7 +153,7 @@ export function ChannelResourceAnalytics(props: Props) {
         </div>
 
         <div className='overflow-x-auto'>
-          <table className='w-full min-w-[720px] text-left text-xs'>
+          <table className='w-full min-w-[600px] text-left text-xs'>
             <thead className='bg-muted/40 text-muted-foreground'>
               <tr>
                 <th className='px-4 py-2 font-medium'>{t('Channel')}</th>
@@ -166,9 +166,6 @@ export function ChannelResourceAnalytics(props: Props) {
                   {t('Error rate')}
                 </th>
                 <th className='px-4 py-2 text-right font-medium'>
-                  {t('Quota')}
-                </th>
-                <th className='px-4 py-2 text-right font-medium'>
                   {t('Avg latency')}
                 </th>
               </tr>
@@ -177,7 +174,7 @@ export function ChannelResourceAnalytics(props: Props) {
               {loading && items.length === 0 ? (
                 Array.from({ length: 3 }).map((_, idx) => (
                   <tr key={idx}>
-                    <td className='px-4 py-2.5' colSpan={7}>
+                    <td className='px-4 py-2.5' colSpan={6}>
                       <Skeleton className='h-5 w-full' />
                     </td>
                   </tr>
@@ -186,7 +183,7 @@ export function ChannelResourceAnalytics(props: Props) {
                 <tr>
                   <td
                     className='text-muted-foreground px-4 py-8 text-center'
-                    colSpan={7}
+                    colSpan={6}
                   >
                     {error
                       ? t('Failed to load channel resource data')
@@ -238,9 +235,6 @@ export function ChannelResourceAnalytics(props: Props) {
                         {item.requests + item.error_requests === 0
                           ? '-'
                           : `${item.error_rate.toFixed(1)}%`}
-                      </td>
-                      <td className='px-4 py-2.5 text-right font-mono tabular-nums'>
-                        {formatQuota(item.quota)}
                       </td>
                       <td className='px-4 py-2.5 text-right font-mono tabular-nums'>
                         {formatDuration(item.avg_use_time_ms)}

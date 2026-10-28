@@ -219,6 +219,7 @@ func SetApiRouter(router *gin.Engine) {
 			channelRuntimeRoute.GET("/status", middleware.RequirePermission(authz.ChannelRead), controller.GetChannelRuntimeStatus)
 			channelRuntimeRoute.GET("/samples", middleware.RequirePermission(authz.ChannelRead), controller.GetChannelRuntimeSamples)
 			channelRuntimeRoute.GET("/limits", middleware.RequirePermission(authz.ChannelRead), controller.GetChannelRuntimeLimits)
+			channelRuntimeRoute.GET("/channels", middleware.RequirePermission(authz.ChannelRead), controller.GetChannelRuntimeChannels)
 			channelRuntimeRoute.GET("/resource", middleware.RequirePermission(authz.ChannelRead), controller.GetChannelResourceStats)
 			channelRuntimeRoute.POST("/refresh", middleware.RequirePermission(authz.ChannelOperate), controller.RefreshChannelRuntime)
 			channelRuntimeRoute.POST("/:id/unlock", middleware.RequirePermission(authz.ChannelOperate), controller.UnlockChannelRuntime)

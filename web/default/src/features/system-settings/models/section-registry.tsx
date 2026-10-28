@@ -178,14 +178,12 @@ const MODELS_SECTIONS = [
             settings['channel_runtime_setting.enabled'] ?? false,
           'channel_runtime_setting.scrape_interval_seconds':
             settings['channel_runtime_setting.scrape_interval_seconds'] ?? 5,
-          'channel_runtime_setting.scrape_timeout_ms':
-            settings['channel_runtime_setting.scrape_timeout_ms'] ?? 3000,
-          'channel_runtime_setting.sample_retention_hours':
-            settings['channel_runtime_setting.sample_retention_hours'] ?? 8760,
+          'channel_runtime_setting.scrape_timeout_seconds':
+            settings['channel_runtime_setting.scrape_timeout_seconds'] ?? 3,
+          'channel_runtime_setting.sample_retention_months':
+            settings['channel_runtime_setting.sample_retention_months'] ?? 12,
           'channel_runtime_setting.default_max_batch':
             settings['channel_runtime_setting.default_max_batch'] ?? 4,
-          'channel_runtime_setting.scrape_only_channels':
-            settings['channel_runtime_setting.scrape_only_channels'] ?? '[]',
           'channel_runtime_setting.max_batch_overrides':
             settings['channel_runtime_setting.max_batch_overrides'] ?? '[]',
           'channel_runtime_setting.saturation_lock_enabled':

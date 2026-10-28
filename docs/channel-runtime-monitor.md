@@ -40,10 +40,10 @@
 `channel_runtime_samples` 字段：`running`、`waiting`、`max_batch`、`kv_cache_usage`（0~100）、
 `prefix_cache_hit_rate`（0~100）、`locked`（采样时刻是否处于饱和锁）。
 
-默认保留 **8760 小时（1 年）**，采集循环每 10 分钟清理一次过期数据（`sample_retention_hours` 可调，上限 1 年）。
+默认保留 **12 个月（1 年）**，采集循环每 10 分钟清理一次过期数据（`sample_retention_months` 可调，上限 12 个月）。
 
 > 数据量提醒：5s 间隔 × 单渠道 ≈ 1.7 万条/天、630 万条/年。渠道多或跑在 SQLite 上时，
-> 建议把 `sample_retention_hours` 调小（例如 720 = 30 天）。
+> 建议把 `sample_retention_months` 调小（例如 1 个月）。
 >
 > 若曾按旧版（主键为 `channel_id + model_name`）建过 `channel_runtime_limits`，先执行：
 > `DROP TABLE channel_runtime_limits;` 让程序按新结构重建。
@@ -60,7 +60,8 @@ base_url  ->  scheme://host + /metrics
 `https://glm5.internal/api/v1/chat` → `https://glm5.internal/metrics`。
 
 > `/metrics` 是 vLLM 的固定标准路径，业务路径（`/v1/...`）会被忽略。
-> 若某渠道不该被采集（例如官方 API 渠道没有 `/metrics`），用 `scrape_only_channels` 白名单排除。
+> **采集范围就是「最大 batch」表里列出的渠道**：没列进去的渠道不会发任何 `/metrics` 请求，
+> 官方 API 这类没有 `/metrics` 的渠道只要不配置即可。
 
 解析的指标：
 
@@ -74,13 +75,19 @@ base_url  ->  scheme://host + /metrics
 
 指标带 `model_name` 标签时按模型归属；不带标签时归属渠道的第一个模型。
 
-## 4. 最大 batch（按渠道配置，默认 4）
+## 4. 最大 batch（按渠道名配置，默认 4）
 
-一个渠道 = 一个 vLLM 实例 = 一个模型，所以没有再绑定模型名。优先级：
+一个渠道 = 一个 vLLM 实例 = 一个模型，所以没有再绑定模型名。这张表同时决定**采集范围**：
+列在表里的渠道才采集，没列的一个请求都不发。
+
+优先级：
 
 ```
 max_batch_overrides 中按 channel_name 命中  >  vllm:max_num_seqs  >  default_max_batch(默认 4)
 ```
+
+后台打开配置页时会**默认把环境里的所有渠道列出来**，最大 batch 统一填 `default_max_batch`（4），
+环境里一个渠道都没有时显示一行示例 `example-channel`。
 
 配置示例（`channel_runtime_setting.max_batch_overrides`）：
 
@@ -119,24 +126,23 @@ UPDATE channel_runtime_limits SET peak_running = 0 WHERE channel_id = 1;
 
 长度单位固定为 **估算 prompt token**（用请求体做 token 估算，不再提供字符数选项）。
 
+后台是一张表：**模型名 + 渠道名 + 长度区间 [min, max)**，每行把一个模型的一个长度区间绑到单个渠道。
+打开配置页时默认把环境里所有渠道列出来，模型名预填该渠道的第一个模型，区间默认 `[0, 0]`（无上限），
+默认不启用——需要分流时把对应行打勾即可。
+
 配置示例（`channel_runtime_setting.length_routing_rules`）：
 
 ```json
 [
-  {
-    "name": "glm5 long context split",
-    "model_regex": ["^GLM5.*$"],
-    "enabled": true,
-    "segments": [
-      { "min_length": 0,     "max_length": 10000, "channel_ids": [1] },
-      { "min_length": 10000, "max_length": 0,     "channel_ids": [2, 3, 4] }
-    ]
-  }
+  { "model_name": "glm-5", "channel_name": "GLM5-H20-01", "min_length": 0,     "max_length": 10000, "enabled": true },
+  { "model_name": "glm-5", "channel_name": "GLM5-A100-long", "min_length": 10000, "max_length": 0, "enabled": true }
 ]
 ```
 
-- 区间为 `[min_length, max_length)`，`max_length = 0` 表示无上界。
-- 命中规则后，该请求只能调到 `channel_ids` 里的渠道；亲和性命中的渠道不在集合内会被跳过
+- 区间为 `[min_length, max_length)`，`max_length = 0` 表示无上界，`[0, 0]` 即「全量兜底」。
+- **下界最大的规则优先**：`[10000, 0]` 会盖住 `[0, 0]`，长请求自动走专用渠道。
+- `model_name` 留空表示对所有模型生效；渠道名按名称解析成 id（解析结果缓存 60s，改名后一分钟内生效）。
+- 命中规则后，该请求只能调到这一条渠道；亲和性命中的渠道不在集合内会被跳过
   （不会清掉亲和缓存，短请求仍能复用会话粘性）。
 - `length_routing_fallback = true`（默认）：集合内没有可用渠道时退回全量候选，避免配置写错直接 503。
 - 请求体超过 8MB 直接按"超长"处理，不做全文遍历。
@@ -149,18 +155,17 @@ UPDATE channel_runtime_limits SET peak_running = 0 WHERE channel_id = 1;
 | --- | --- | --- |
 | `enabled` | false | 采集总开关；关闭后清空内存态并解除所有锁，调度回到原有逻辑 |
 | `scrape_interval_seconds` | 5 | 采集间隔（1~300） |
-| `scrape_timeout_ms` | 3000 | 单次抓取超时 |
-| `sample_retention_hours` | 8760 | 时序数据保留时长（1 年，上限 1 年） |
-| `scrape_only_channels` | `[]` | 白名单，非空时只采集这些渠道 |
-| `default_max_batch` | 4 | 未匹配覆盖时的最大 batch |
-| `max_batch_overrides` | `[]` | `[{channel_name, max_batch}]` |
+| `scrape_timeout_seconds` | 3 | 单次抓取超时（秒，1~30） |
+| `sample_retention_months` | 12 | 时序数据保留时长（月，上限 12） |
+| `default_max_batch` | 4 | 新增渠道行时预填的最大 batch |
+| `max_batch_overrides` | `[]` | `[{channel_name, max_batch}]`，**同时是采集白名单** |
 | `saturation_lock_enabled` | true | 饱和锁开关（采集未开启时不生效） |
 | `saturation_waiting_samples` | 3 | 连读多少次排队才锁 |
 | `saturation_release_samples` | 1 | 连读多少次空闲才解锁 |
 | `saturation_max_lock_seconds` | 300 | 最长锁定时间，0 = 不限 |
 | `length_routing_enabled` | false | 长度分流开关 |
 | `length_routing_fallback` | true | 无可用渠道时回退全量 |
-| `length_routing_rules` | 示例规则 | 见上 |
+| `length_routing_rules` | `[]` | `[{model_name, channel_name, min_length, max_length, enabled}]` |
 
 ## 8. 接口
 
@@ -169,6 +174,7 @@ UPDATE channel_runtime_limits SET peak_running = 0 WHERE channel_id = 1;
 | GET | `/api/channel_runtime/status` | channel read | 各渠道当前 Running/Waiting/最大 batch/锁定状态 |
 | GET | `/api/channel_runtime/samples?channel_id=&model_name=&hours=&limit=` | channel read | 时序快照 |
 | GET | `/api/channel_runtime/limits` | channel read | 最大 batch 解析结果 |
+| GET | `/api/channel_runtime/channels` | channel read | 环境中的全部渠道（配置页默认行用，不含密钥） |
 | GET | `/api/channel_runtime/resource?hours=24` | channel read | 看板用：按渠道聚合的调用情况 + 拥挤程度 |
 | POST | `/api/channel_runtime/refresh` | channel operate | 立即采集一次 |
 | POST | `/api/channel_runtime/:id/unlock` | channel operate | 手工解锁 |
@@ -177,7 +183,7 @@ UPDATE channel_runtime_limits SET peak_running = 0 WHERE channel_id = 1;
 
 位置：数据看板 → **渠道资源分析**（`/dashboard/channels`，仅管理员可见）。
 
-- **第一块「按渠道调用情况」**：渠道 × 时间窗（24h / 7d）的请求数、流量占比、错误率、额度、平均耗时。
+- **第一块「按渠道调用情况」**：渠道 × 时间窗（24h / 7d）的请求数、流量占比、错误率、平均耗时（不展示额度）。
   数据来源 `logs` 表按 `channel_id` 聚合（成功计费日志 `type=2` + 错误日志 `type=5`）。
 - **第二块「渠道拥挤程度」**：按利用率（`Running / max_batch`）从高到低排序，每条渠道一根进度条，
   ≥50% 蓝、≥80% 黄、≥100% 或已锁定红；右侧同时给出 `Running / max_batch`、`Waiting`、
@@ -186,7 +192,7 @@ UPDATE channel_runtime_limits SET peak_running = 0 WHERE channel_id = 1;
 ## 10. 部署注意
 
 - **多节点**：各节点独立采集、独立判定锁（锁是内存态，跟本地流量视图一致）；样本表靠唯一索引去重，
-  不会因为多节点重复写而膨胀。若节点间行为差异较大，可用 `scrape_only_channels` 只让一个节点采集。
+  不会因为多节点重复写而膨胀。若节点间行为差异较大，可通过关闭某节点上的采集开关来收敛。
 - **vLLM 侧**：`/metrics` 必须可从网关容器访问（同内网/同 compose 网络），不要挂在需要鉴权的网关后面。
 - **指标缺失**：早期 vLLM 没有 `vllm:max_num_seqs`，此时用 `max_batch_overrides` 按渠道名配置，
   或直接依赖默认值 4。
