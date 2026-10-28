@@ -29,6 +29,7 @@ import { Route as errors503RouteImport } from './routes/(errors)/503'
 import { Route as AuthenticatedChat2linkRouteImport } from './routes/_authenticated/chat2link'
 import { Route as AuthenticatedSystemSettingsRouteRouteImport } from './routes/_authenticated/system-settings/route'
 import { Route as AboutIndexRouteImport } from './routes/about/index'
+import { Route as InfoIndexRouteImport } from './routes/info/index'
 import { Route as OauthProviderRouteImport } from './routes/oauth/$provider'
 import { Route as PricingIndexRouteImport } from './routes/pricing/index'
 import { Route as RankingsIndexRouteImport } from './routes/rankings/index'
@@ -36,6 +37,7 @@ import { Route as SetupIndexRouteImport } from './routes/setup/index'
 import { Route as authUserResetRouteImport } from './routes/(auth)/user/reset'
 import { Route as AuthenticatedChannelsIndexRouteImport } from './routes/_authenticated/channels/index'
 import { Route as AuthenticatedChatChatIdRouteImport } from './routes/_authenticated/chat/$chatId'
+import { Route as AuthenticatedCompletionTokensDistributionIndexRouteImport } from './routes/_authenticated/completion-tokens-distribution/index'
 import { Route as AuthenticatedDashboardIndexRouteImport } from './routes/_authenticated/dashboard/index'
 import { Route as AuthenticatedDashboardSectionRouteImport } from './routes/_authenticated/dashboard/$section'
 import { Route as AuthenticatedErrorsErrorRouteImport } from './routes/_authenticated/errors/$error'
@@ -44,7 +46,9 @@ import { Route as AuthenticatedModelsIndexRouteImport } from './routes/_authenti
 import { Route as AuthenticatedModelsSectionRouteImport } from './routes/_authenticated/models/$section'
 import { Route as AuthenticatedPlaygroundIndexRouteImport } from './routes/_authenticated/playground/index'
 import { Route as AuthenticatedProfileIndexRouteImport } from './routes/_authenticated/profile/index'
+import { Route as AuthenticatedPromptTokensDistributionIndexRouteImport } from './routes/_authenticated/prompt-tokens-distribution/index'
 import { Route as AuthenticatedRedemptionCodesIndexRouteImport } from './routes/_authenticated/redemption-codes/index'
+import { Route as AuthenticatedRequestCountDistributionIndexRouteImport } from './routes/_authenticated/request-count-distribution/index'
 import { Route as AuthenticatedSecurityIndexRouteImport } from './routes/_authenticated/security/index'
 import { Route as AuthenticatedSubscriptionsIndexRouteImport } from './routes/_authenticated/subscriptions/index'
 import { Route as AuthenticatedSystemInfoIndexRouteImport } from './routes/_authenticated/system-info/index'
@@ -53,6 +57,9 @@ import { Route as AuthenticatedTaskPluginsIndexRouteImport } from './routes/_aut
 import { Route as AuthenticatedUsageLogsIndexRouteImport } from './routes/_authenticated/usage-logs/index'
 import { Route as AuthenticatedUsageLogsSectionRouteImport } from './routes/_authenticated/usage-logs/$section'
 import { Route as AuthenticatedUsageLogsAuditRouteImport } from './routes/_authenticated/usage-logs/audit'
+import { Route as AuthenticatedUsageStatisticsMonthlyIndexRouteImport } from './routes/_authenticated/usage-statistics-monthly/index'
+import { Route as AuthenticatedUsageStatisticsRankIndexRouteImport } from './routes/_authenticated/usage-statistics-rank/index'
+import { Route as AuthenticatedUsageStatisticsIndexRouteImport } from './routes/_authenticated/usage-statistics/index'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedWalletIndexRouteImport } from './routes/_authenticated/wallet/index'
 import { Route as PricingModelIdIndexRouteImport } from './routes/pricing/$modelId/index'
@@ -172,6 +179,11 @@ const AboutIndexRoute = AboutIndexRouteImport.update({
   path: '/about/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InfoIndexRoute = InfoIndexRouteImport.update({
+  id: '/info/',
+  path: '/info/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const OauthProviderRoute = OauthProviderRouteImport.update({
   id: '/oauth/$provider',
   path: '/oauth/$provider',
@@ -208,6 +220,12 @@ const AuthenticatedChatChatIdRoute = AuthenticatedChatChatIdRouteImport.update({
   path: '/chat/$chatId',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedCompletionTokensDistributionIndexRoute =
+  AuthenticatedCompletionTokensDistributionIndexRouteImport.update({
+    id: '/completion-tokens-distribution/',
+    path: '/completion-tokens-distribution/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedDashboardIndexRoute =
   AuthenticatedDashboardIndexRouteImport.update({
     id: '/dashboard/',
@@ -255,10 +273,22 @@ const AuthenticatedProfileIndexRoute =
     path: '/profile/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedPromptTokensDistributionIndexRoute =
+  AuthenticatedPromptTokensDistributionIndexRouteImport.update({
+    id: '/prompt-tokens-distribution/',
+    path: '/prompt-tokens-distribution/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedRedemptionCodesIndexRoute =
   AuthenticatedRedemptionCodesIndexRouteImport.update({
     id: '/redemption-codes/',
     path: '/redemption-codes/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedRequestCountDistributionIndexRoute =
+  AuthenticatedRequestCountDistributionIndexRouteImport.update({
+    id: '/request-count-distribution/',
+    path: '/request-count-distribution/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedSecurityIndexRoute =
@@ -307,6 +337,24 @@ const AuthenticatedUsageLogsAuditRoute =
   AuthenticatedUsageLogsAuditRouteImport.update({
     id: '/usage-logs/audit',
     path: '/usage-logs/audit',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedUsageStatisticsMonthlyIndexRoute =
+  AuthenticatedUsageStatisticsMonthlyIndexRouteImport.update({
+    id: '/usage-statistics-monthly/',
+    path: '/usage-statistics-monthly/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedUsageStatisticsRankIndexRoute =
+  AuthenticatedUsageStatisticsRankIndexRouteImport.update({
+    id: '/usage-statistics-rank/',
+    path: '/usage-statistics-rank/',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
+const AuthenticatedUsageStatisticsIndexRoute =
+  AuthenticatedUsageStatisticsIndexRouteImport.update({
+    id: '/usage-statistics/',
+    path: '/usage-statistics/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
 const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
@@ -442,6 +490,7 @@ export interface FileRoutesByFullPath {
   '/chat2link': typeof AuthenticatedChat2linkRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
+  '/info/': typeof InfoIndexRoute
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
   '/setup/': typeof SetupIndexRoute
@@ -453,18 +502,24 @@ export interface FileRoutesByFullPath {
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/usage-logs/audit': typeof AuthenticatedUsageLogsAuditRoute
   '/channels/': typeof AuthenticatedChannelsIndexRoute
+  '/completion-tokens-distribution/': typeof AuthenticatedCompletionTokensDistributionIndexRoute
   '/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/keys/': typeof AuthenticatedKeysIndexRoute
   '/models/': typeof AuthenticatedModelsIndexRoute
   '/playground/': typeof AuthenticatedPlaygroundIndexRoute
   '/profile/': typeof AuthenticatedProfileIndexRoute
+  '/prompt-tokens-distribution/': typeof AuthenticatedPromptTokensDistributionIndexRoute
   '/redemption-codes/': typeof AuthenticatedRedemptionCodesIndexRoute
+  '/request-count-distribution/': typeof AuthenticatedRequestCountDistributionIndexRoute
   '/security/': typeof AuthenticatedSecurityIndexRoute
   '/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
   '/system-info/': typeof AuthenticatedSystemInfoIndexRoute
   '/system-settings/': typeof AuthenticatedSystemSettingsIndexRoute
   '/task-plugins/': typeof AuthenticatedTaskPluginsIndexRoute
   '/usage-logs/': typeof AuthenticatedUsageLogsIndexRoute
+  '/usage-statistics-monthly/': typeof AuthenticatedUsageStatisticsMonthlyIndexRoute
+  '/usage-statistics-rank/': typeof AuthenticatedUsageStatisticsRankIndexRoute
+  '/usage-statistics/': typeof AuthenticatedUsageStatisticsIndexRoute
   '/users/': typeof AuthenticatedUsersIndexRoute
   '/wallet/': typeof AuthenticatedWalletIndexRoute
   '/pricing/$modelId/': typeof PricingModelIdIndexRoute
@@ -504,6 +559,7 @@ export interface FileRoutesByTo {
   '/chat2link': typeof AuthenticatedChat2linkRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about': typeof AboutIndexRoute
+  '/info': typeof InfoIndexRoute
   '/pricing': typeof PricingIndexRoute
   '/rankings': typeof RankingsIndexRoute
   '/setup': typeof SetupIndexRoute
@@ -515,18 +571,24 @@ export interface FileRoutesByTo {
   '/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/usage-logs/audit': typeof AuthenticatedUsageLogsAuditRoute
   '/channels': typeof AuthenticatedChannelsIndexRoute
+  '/completion-tokens-distribution': typeof AuthenticatedCompletionTokensDistributionIndexRoute
   '/dashboard': typeof AuthenticatedDashboardIndexRoute
   '/keys': typeof AuthenticatedKeysIndexRoute
   '/models': typeof AuthenticatedModelsIndexRoute
   '/playground': typeof AuthenticatedPlaygroundIndexRoute
   '/profile': typeof AuthenticatedProfileIndexRoute
+  '/prompt-tokens-distribution': typeof AuthenticatedPromptTokensDistributionIndexRoute
   '/redemption-codes': typeof AuthenticatedRedemptionCodesIndexRoute
+  '/request-count-distribution': typeof AuthenticatedRequestCountDistributionIndexRoute
   '/security': typeof AuthenticatedSecurityIndexRoute
   '/subscriptions': typeof AuthenticatedSubscriptionsIndexRoute
   '/system-info': typeof AuthenticatedSystemInfoIndexRoute
   '/system-settings': typeof AuthenticatedSystemSettingsIndexRoute
   '/task-plugins': typeof AuthenticatedTaskPluginsIndexRoute
   '/usage-logs': typeof AuthenticatedUsageLogsIndexRoute
+  '/usage-statistics-monthly': typeof AuthenticatedUsageStatisticsMonthlyIndexRoute
+  '/usage-statistics-rank': typeof AuthenticatedUsageStatisticsRankIndexRoute
+  '/usage-statistics': typeof AuthenticatedUsageStatisticsIndexRoute
   '/users': typeof AuthenticatedUsersIndexRoute
   '/wallet': typeof AuthenticatedWalletIndexRoute
   '/pricing/$modelId': typeof PricingModelIdIndexRoute
@@ -570,6 +632,7 @@ export interface FileRoutesById {
   '/_authenticated/chat2link': typeof AuthenticatedChat2linkRoute
   '/oauth/$provider': typeof OauthProviderRoute
   '/about/': typeof AboutIndexRoute
+  '/info/': typeof InfoIndexRoute
   '/pricing/': typeof PricingIndexRoute
   '/rankings/': typeof RankingsIndexRoute
   '/setup/': typeof SetupIndexRoute
@@ -581,18 +644,24 @@ export interface FileRoutesById {
   '/_authenticated/usage-logs/$section': typeof AuthenticatedUsageLogsSectionRoute
   '/_authenticated/usage-logs/audit': typeof AuthenticatedUsageLogsAuditRoute
   '/_authenticated/channels/': typeof AuthenticatedChannelsIndexRoute
+  '/_authenticated/completion-tokens-distribution/': typeof AuthenticatedCompletionTokensDistributionIndexRoute
   '/_authenticated/dashboard/': typeof AuthenticatedDashboardIndexRoute
   '/_authenticated/keys/': typeof AuthenticatedKeysIndexRoute
   '/_authenticated/models/': typeof AuthenticatedModelsIndexRoute
   '/_authenticated/playground/': typeof AuthenticatedPlaygroundIndexRoute
   '/_authenticated/profile/': typeof AuthenticatedProfileIndexRoute
+  '/_authenticated/prompt-tokens-distribution/': typeof AuthenticatedPromptTokensDistributionIndexRoute
   '/_authenticated/redemption-codes/': typeof AuthenticatedRedemptionCodesIndexRoute
+  '/_authenticated/request-count-distribution/': typeof AuthenticatedRequestCountDistributionIndexRoute
   '/_authenticated/security/': typeof AuthenticatedSecurityIndexRoute
   '/_authenticated/subscriptions/': typeof AuthenticatedSubscriptionsIndexRoute
   '/_authenticated/system-info/': typeof AuthenticatedSystemInfoIndexRoute
   '/_authenticated/system-settings/': typeof AuthenticatedSystemSettingsIndexRoute
   '/_authenticated/task-plugins/': typeof AuthenticatedTaskPluginsIndexRoute
   '/_authenticated/usage-logs/': typeof AuthenticatedUsageLogsIndexRoute
+  '/_authenticated/usage-statistics-monthly/': typeof AuthenticatedUsageStatisticsMonthlyIndexRoute
+  '/_authenticated/usage-statistics-rank/': typeof AuthenticatedUsageStatisticsRankIndexRoute
+  '/_authenticated/usage-statistics/': typeof AuthenticatedUsageStatisticsIndexRoute
   '/_authenticated/users/': typeof AuthenticatedUsersIndexRoute
   '/_authenticated/wallet/': typeof AuthenticatedWalletIndexRoute
   '/pricing/$modelId/': typeof PricingModelIdIndexRoute
@@ -635,6 +704,7 @@ export interface FileRouteTypes {
     | '/chat2link'
     | '/oauth/$provider'
     | '/about/'
+    | '/info/'
     | '/pricing/'
     | '/rankings/'
     | '/setup/'
@@ -646,18 +716,24 @@ export interface FileRouteTypes {
     | '/usage-logs/$section'
     | '/usage-logs/audit'
     | '/channels/'
+    | '/completion-tokens-distribution/'
     | '/dashboard/'
     | '/keys/'
     | '/models/'
     | '/playground/'
     | '/profile/'
+    | '/prompt-tokens-distribution/'
     | '/redemption-codes/'
+    | '/request-count-distribution/'
     | '/security/'
     | '/subscriptions/'
     | '/system-info/'
     | '/system-settings/'
     | '/task-plugins/'
     | '/usage-logs/'
+    | '/usage-statistics-monthly/'
+    | '/usage-statistics-rank/'
+    | '/usage-statistics/'
     | '/users/'
     | '/wallet/'
     | '/pricing/$modelId/'
@@ -697,6 +773,7 @@ export interface FileRouteTypes {
     | '/chat2link'
     | '/oauth/$provider'
     | '/about'
+    | '/info'
     | '/pricing'
     | '/rankings'
     | '/setup'
@@ -708,18 +785,24 @@ export interface FileRouteTypes {
     | '/usage-logs/$section'
     | '/usage-logs/audit'
     | '/channels'
+    | '/completion-tokens-distribution'
     | '/dashboard'
     | '/keys'
     | '/models'
     | '/playground'
     | '/profile'
+    | '/prompt-tokens-distribution'
     | '/redemption-codes'
+    | '/request-count-distribution'
     | '/security'
     | '/subscriptions'
     | '/system-info'
     | '/system-settings'
     | '/task-plugins'
     | '/usage-logs'
+    | '/usage-statistics-monthly'
+    | '/usage-statistics-rank'
+    | '/usage-statistics'
     | '/users'
     | '/wallet'
     | '/pricing/$modelId'
@@ -762,6 +845,7 @@ export interface FileRouteTypes {
     | '/_authenticated/chat2link'
     | '/oauth/$provider'
     | '/about/'
+    | '/info/'
     | '/pricing/'
     | '/rankings/'
     | '/setup/'
@@ -773,18 +857,24 @@ export interface FileRouteTypes {
     | '/_authenticated/usage-logs/$section'
     | '/_authenticated/usage-logs/audit'
     | '/_authenticated/channels/'
+    | '/_authenticated/completion-tokens-distribution/'
     | '/_authenticated/dashboard/'
     | '/_authenticated/keys/'
     | '/_authenticated/models/'
     | '/_authenticated/playground/'
     | '/_authenticated/profile/'
+    | '/_authenticated/prompt-tokens-distribution/'
     | '/_authenticated/redemption-codes/'
+    | '/_authenticated/request-count-distribution/'
     | '/_authenticated/security/'
     | '/_authenticated/subscriptions/'
     | '/_authenticated/system-info/'
     | '/_authenticated/system-settings/'
     | '/_authenticated/task-plugins/'
     | '/_authenticated/usage-logs/'
+    | '/_authenticated/usage-statistics-monthly/'
+    | '/_authenticated/usage-statistics-rank/'
+    | '/_authenticated/usage-statistics/'
     | '/_authenticated/users/'
     | '/_authenticated/wallet/'
     | '/pricing/$modelId/'
@@ -819,6 +909,7 @@ export interface RootRouteChildren {
   errors503Route: typeof errors503Route
   OauthProviderRoute: typeof OauthProviderRoute
   AboutIndexRoute: typeof AboutIndexRoute
+  InfoIndexRoute: typeof InfoIndexRoute
   PricingIndexRoute: typeof PricingIndexRoute
   RankingsIndexRoute: typeof RankingsIndexRoute
   SetupIndexRoute: typeof SetupIndexRoute
@@ -967,6 +1058,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AboutIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/info/': {
+      id: '/info/'
+      path: '/info'
+      fullPath: '/info/'
+      preLoaderRoute: typeof InfoIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/oauth/$provider': {
       id: '/oauth/$provider'
       path: '/oauth/$provider'
@@ -1014,6 +1112,13 @@ declare module '@tanstack/react-router' {
       path: '/chat/$chatId'
       fullPath: '/chat/$chatId'
       preLoaderRoute: typeof AuthenticatedChatChatIdRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/completion-tokens-distribution/': {
+      id: '/_authenticated/completion-tokens-distribution/'
+      path: '/completion-tokens-distribution'
+      fullPath: '/completion-tokens-distribution/'
+      preLoaderRoute: typeof AuthenticatedCompletionTokensDistributionIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/dashboard/': {
@@ -1072,11 +1177,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedProfileIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/prompt-tokens-distribution/': {
+      id: '/_authenticated/prompt-tokens-distribution/'
+      path: '/prompt-tokens-distribution'
+      fullPath: '/prompt-tokens-distribution/'
+      preLoaderRoute: typeof AuthenticatedPromptTokensDistributionIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/redemption-codes/': {
       id: '/_authenticated/redemption-codes/'
       path: '/redemption-codes'
       fullPath: '/redemption-codes/'
       preLoaderRoute: typeof AuthenticatedRedemptionCodesIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/request-count-distribution/': {
+      id: '/_authenticated/request-count-distribution/'
+      path: '/request-count-distribution'
+      fullPath: '/request-count-distribution/'
+      preLoaderRoute: typeof AuthenticatedRequestCountDistributionIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/security/': {
@@ -1133,6 +1252,27 @@ declare module '@tanstack/react-router' {
       path: '/usage-logs/audit'
       fullPath: '/usage-logs/audit'
       preLoaderRoute: typeof AuthenticatedUsageLogsAuditRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/usage-statistics-monthly/': {
+      id: '/_authenticated/usage-statistics-monthly/'
+      path: '/usage-statistics-monthly'
+      fullPath: '/usage-statistics-monthly/'
+      preLoaderRoute: typeof AuthenticatedUsageStatisticsMonthlyIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/usage-statistics-rank/': {
+      id: '/_authenticated/usage-statistics-rank/'
+      path: '/usage-statistics-rank'
+      fullPath: '/usage-statistics-rank/'
+      preLoaderRoute: typeof AuthenticatedUsageStatisticsRankIndexRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/usage-statistics/': {
+      id: '/_authenticated/usage-statistics/'
+      path: '/usage-statistics'
+      fullPath: '/usage-statistics/'
+      preLoaderRoute: typeof AuthenticatedUsageStatisticsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/users/': {
@@ -1370,17 +1510,23 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedUsageLogsSectionRoute: typeof AuthenticatedUsageLogsSectionRoute
   AuthenticatedUsageLogsAuditRoute: typeof AuthenticatedUsageLogsAuditRoute
   AuthenticatedChannelsIndexRoute: typeof AuthenticatedChannelsIndexRoute
+  AuthenticatedCompletionTokensDistributionIndexRoute: typeof AuthenticatedCompletionTokensDistributionIndexRoute
   AuthenticatedDashboardIndexRoute: typeof AuthenticatedDashboardIndexRoute
   AuthenticatedKeysIndexRoute: typeof AuthenticatedKeysIndexRoute
   AuthenticatedModelsIndexRoute: typeof AuthenticatedModelsIndexRoute
   AuthenticatedPlaygroundIndexRoute: typeof AuthenticatedPlaygroundIndexRoute
   AuthenticatedProfileIndexRoute: typeof AuthenticatedProfileIndexRoute
+  AuthenticatedPromptTokensDistributionIndexRoute: typeof AuthenticatedPromptTokensDistributionIndexRoute
   AuthenticatedRedemptionCodesIndexRoute: typeof AuthenticatedRedemptionCodesIndexRoute
+  AuthenticatedRequestCountDistributionIndexRoute: typeof AuthenticatedRequestCountDistributionIndexRoute
   AuthenticatedSecurityIndexRoute: typeof AuthenticatedSecurityIndexRoute
   AuthenticatedSubscriptionsIndexRoute: typeof AuthenticatedSubscriptionsIndexRoute
   AuthenticatedSystemInfoIndexRoute: typeof AuthenticatedSystemInfoIndexRoute
   AuthenticatedTaskPluginsIndexRoute: typeof AuthenticatedTaskPluginsIndexRoute
   AuthenticatedUsageLogsIndexRoute: typeof AuthenticatedUsageLogsIndexRoute
+  AuthenticatedUsageStatisticsMonthlyIndexRoute: typeof AuthenticatedUsageStatisticsMonthlyIndexRoute
+  AuthenticatedUsageStatisticsRankIndexRoute: typeof AuthenticatedUsageStatisticsRankIndexRoute
+  AuthenticatedUsageStatisticsIndexRoute: typeof AuthenticatedUsageStatisticsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
   AuthenticatedWalletIndexRoute: typeof AuthenticatedWalletIndexRoute
 }
@@ -1396,18 +1542,30 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedUsageLogsSectionRoute: AuthenticatedUsageLogsSectionRoute,
   AuthenticatedUsageLogsAuditRoute: AuthenticatedUsageLogsAuditRoute,
   AuthenticatedChannelsIndexRoute: AuthenticatedChannelsIndexRoute,
+  AuthenticatedCompletionTokensDistributionIndexRoute:
+    AuthenticatedCompletionTokensDistributionIndexRoute,
   AuthenticatedDashboardIndexRoute: AuthenticatedDashboardIndexRoute,
   AuthenticatedKeysIndexRoute: AuthenticatedKeysIndexRoute,
   AuthenticatedModelsIndexRoute: AuthenticatedModelsIndexRoute,
   AuthenticatedPlaygroundIndexRoute: AuthenticatedPlaygroundIndexRoute,
   AuthenticatedProfileIndexRoute: AuthenticatedProfileIndexRoute,
+  AuthenticatedPromptTokensDistributionIndexRoute:
+    AuthenticatedPromptTokensDistributionIndexRoute,
   AuthenticatedRedemptionCodesIndexRoute:
     AuthenticatedRedemptionCodesIndexRoute,
+  AuthenticatedRequestCountDistributionIndexRoute:
+    AuthenticatedRequestCountDistributionIndexRoute,
   AuthenticatedSecurityIndexRoute: AuthenticatedSecurityIndexRoute,
   AuthenticatedSubscriptionsIndexRoute: AuthenticatedSubscriptionsIndexRoute,
   AuthenticatedSystemInfoIndexRoute: AuthenticatedSystemInfoIndexRoute,
   AuthenticatedTaskPluginsIndexRoute: AuthenticatedTaskPluginsIndexRoute,
   AuthenticatedUsageLogsIndexRoute: AuthenticatedUsageLogsIndexRoute,
+  AuthenticatedUsageStatisticsMonthlyIndexRoute:
+    AuthenticatedUsageStatisticsMonthlyIndexRoute,
+  AuthenticatedUsageStatisticsRankIndexRoute:
+    AuthenticatedUsageStatisticsRankIndexRoute,
+  AuthenticatedUsageStatisticsIndexRoute:
+    AuthenticatedUsageStatisticsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
   AuthenticatedWalletIndexRoute: AuthenticatedWalletIndexRoute,
 }
@@ -1428,6 +1586,7 @@ const rootRouteChildren: RootRouteChildren = {
   errors503Route: errors503Route,
   OauthProviderRoute: OauthProviderRoute,
   AboutIndexRoute: AboutIndexRoute,
+  InfoIndexRoute: InfoIndexRoute,
   PricingIndexRoute: PricingIndexRoute,
   RankingsIndexRoute: RankingsIndexRoute,
   SetupIndexRoute: SetupIndexRoute,
