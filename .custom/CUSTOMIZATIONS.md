@@ -108,6 +108,24 @@
 
 ---
 
+### [7] 渠道运行时监控（vLLM Running/Waiting）+ 饱和锁 + 长度路由 + 渠道资源分析看板
+- **Commit**: 0009
+- **新增**:
+  - `setting/operation_setting/channel_runtime_setting.go` — 配置结构（默认关闭）
+  - `model/channel_runtime.go` — 3 张表：`channel_runtime_samples`（时间序列）、`channel_runtime_limits`（渠道最大 batch）、`channel_runtime_state`（锁状态）
+  - `service/channel_runtime_monitor.go` — 每 5s 抓取渠道 base_url 同源 `/metrics`，落库 Running/Waiting/max_batch，并按阈值上锁/解锁
+  - `service/channel_length_routing.go` — 按 prompt tokens 阈值把请求约束到指定渠道
+  - `controller/channel_runtime.go` — 状态/样本/上限/刷新/解锁/资源统计 6 个 API
+  - `web/default/src/features/dashboard/components/channels/` — 看板「渠道资源分析」（调用量 + 拥挤度）
+  - `web/default/src/features/system-settings/general/channel-runtime/` — 配置页
+  - `docs/channel-runtime-monitor.md` — 设计与排障文档
+- **核心文件**: `main.go`（启动采集器）、`model/main.go`（AutoMigrate）、`router/api-router.go`（`/api/channel_runtime/*` 路由组）、`middleware/distributor.go` + `service/channel_select.go` + `model/channel_cache.go` + `model/ability.go` + `constant/context_key.go`（长度路由约束）、`features/dashboard/{api.ts,index.tsx,section-registry.tsx}`、`features/system-settings/{types.ts,models/section-registry.tsx}`、`i18n/locales/zh.json`
+- **依赖**: vLLM 侧暴露 `vllm:num_requests_running/num_requests_waiting`；max_batch 优先级 渠道名手工配置 > `max_num_seqs` > 默认 4
+- **注意**: `enabled` 默认 false，不配置即完全走原有调度逻辑；样本保留默认 8760h（SQLite 部署建议调小到 720h）
+- **回滚**: 删新增文件 + 停用 `main.go` 中 `StartChannelRuntimeMonitor()` + 撤路由组与 AutoMigrate 注册
+
+---
+
 ## 升级冲突重点关注
 
 按冲突概率从高到低（升级时优先核对这些文件）：
