@@ -6383,7 +6383,7 @@
     "This model has provider-specific billing and must be converted manually.": "此模型使用供应商专用计费逻辑，需手动转换。",
     "This model is billed by usage, but the administrator has not configured its pricing yet.": "此模型按用量计费，但管理员尚未配置价格。",
     "This model is not available in any group, or no group pricing information is configured.": "此模型在任何分组中均不可用，或未配置分组定价信息。",
-    "This month": "本月获得",
+    "This month": "本月",
     "This OAuth provider still has linked users and cannot be deleted. Unbind all users first.": "该 OAuth 提供商还有用户绑定，无法删除。请先解除所有用户绑定。",
     "This OpenRouter Claude price derives cache-write usage from upstream cost and must be converted manually.": "此 OpenRouter Claude 定价根据上游费用反推缓存写入用量，需要手动转换。",
     "This operation is only supported for vLLM channels": "此操作仅支持 vLLM 渠道",
