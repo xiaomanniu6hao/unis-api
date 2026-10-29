@@ -51,7 +51,12 @@ function RuntimeStatusLabel(props: { item: ChannelRuntimeStatusItem }) {
   return <span className='text-emerald-600'>{t('Healthy')}</span>
 }
 
-export function CurrentRuntimePanel() {
+interface Props {
+  // 刷新采集后通知父级重新加载调用分析与趋势数据。
+  onRefresh?: () => void
+}
+
+export function CurrentRuntimePanel(props: Props) {
   const { t } = useTranslation()
   const [items, setItems] = useState<ChannelRuntimeStatusItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -91,7 +96,12 @@ export function CurrentRuntimePanel() {
     const res = await refreshChannelRuntime()
     if (res?.success) {
       toast.success(t('Collection triggered'))
-      window.setTimeout(() => void load(), 2000)
+      // 采集是异步的：先让父级刷新一次，2 秒后采集落库再一起刷新。
+      props.onRefresh?.()
+      window.setTimeout(() => {
+        void load()
+        props.onRefresh?.()
+      }, 2000)
       return
     }
     toast.error(res?.message || t('Failed to trigger collection'))

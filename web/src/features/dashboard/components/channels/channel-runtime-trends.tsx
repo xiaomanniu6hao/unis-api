@@ -53,6 +53,8 @@ const TREND_TABS: Array<{ value: TrendTab; labelKey: string }> = [
 
 interface Props {
   range: ChannelTimeRange
+  // 刷新采集后由父级递增，触发重新拉取趋势数据。
+  refreshKey?: number
 }
 
 // 渠道卡片按时间窗内的平均利用率排序，最忙的排在最前面。
@@ -112,7 +114,7 @@ export function ChannelRuntimeTrends(props: Props) {
     return () => {
       cancelled = true
     }
-  }, [params, t])
+  }, [params, t, props.refreshKey])
 
   const byChannel = useMemo(() => {
     const grouped = new Map<number, ChannelRuntimeSeriesItem[]>()

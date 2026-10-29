@@ -128,7 +128,7 @@ test('shows current runtime, call analytics and per-channel trends together', as
     await screen.findByRole('heading', { name: 'Current runtime' })
   ).toBeVisible()
   // 当前运行时表格里能看到实时 Running / Waiting
-  expect(screen.getByText('#1 gpu-a')).toBeVisible()
+  expect(await screen.findByText('#1 gpu-a')).toBeVisible()
   // 调用分析复用模型调用分析的标题与页签
   expect(await screen.findByText('Channel Call Analytics')).toBeVisible()
   expect(screen.getByRole('button', { name: 'Call Trend' })).toBeVisible()
@@ -162,6 +162,29 @@ test('reloads usage and runtime trends when the time preset changes', async () =
   expect(weekStart.getDay()).toBe(1)
   expect(weekStart.getHours()).toBe(0)
   expect(seriesParams.bucket_seconds).toBe(1800)
+})
+
+test('reloads usage and runtime trends when the runtime refresh button is used', async () => {
+  const user = userEvent.setup()
+  dashboardApi.refreshChannelRuntime.mockResolvedValue({
+    success: true,
+    message: '',
+  })
+  render(<ChannelResourceAnalytics />)
+  await screen.findByText('Channel Call Analytics')
+  await waitFor(() =>
+    expect(dashboardApi.getChannelUsageSeries).toHaveBeenCalled()
+  )
+  dashboardApi.getChannelUsageSeries.mockClear()
+  dashboardApi.getChannelRuntimeSeries.mockClear()
+
+  await user.click(screen.getByRole('button', { name: 'Refresh status' }))
+
+  // 刷新采集后，调用分析与趋势两块数据都要重新拉取
+  await waitFor(() =>
+    expect(dashboardApi.getChannelUsageSeries).toHaveBeenCalledTimes(1)
+  )
+  expect(dashboardApi.getChannelRuntimeSeries).toHaveBeenCalledTimes(1)
 })
 
 test('opens the custom range dialog with start and end pickers', async () => {

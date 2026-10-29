@@ -48,6 +48,21 @@ func TestParseVLLMMetricsWithModelLabel(t *testing.T) {
 	assert.InDelta(t, 240000, series.GenerationTokens, 0.001)
 }
 
+func TestParseVLLMMetricsUsesKVCacheUsageAlias(t *testing.T) {
+	// 新版 vLLM 只暴露 vllm:kv_cache_usage_perc（0~1 的比例），
+	// 旧名字 vllm:gpu_cache_usage_perc 不再出现，两者都要能解析成百分比。
+	parsed := parseVLLMMetrics(`vllm:num_requests_running{model_name="qwen3-8b"} 16.0
+vllm:num_requests_waiting{model_name="qwen3-8b"} 16.0
+vllm:kv_cache_usage_perc{model_name="qwen3-8b"} 0.225
+`)
+	require.True(t, parsed.Found)
+
+	series := parsed.SeriesFor("qwen3-8b")
+	assert.Equal(t, 16, series.Running)
+	assert.InDelta(t, 22.5, series.GPUCacheUsage, 0.001)
+	assert.InDelta(t, 22.5, parsed.Total.GPUCacheUsage, 0.001)
+}
+
 func TestDeriveCounterThroughputUsesTokenDelta(t *testing.T) {
 	const channelId = 991
 	const modelName = "glm-5"

@@ -33,6 +33,8 @@ import type { QuotaDataItem } from '@/features/dashboard/types'
 
 interface Props {
   range: ChannelTimeRange
+  // 刷新采集后由父级递增，触发重新加载。
+  refreshKey?: number
 }
 
 // 把「渠道 × 时间桶」的调用量映射成模型调用分析同款数据结构，
@@ -84,7 +86,7 @@ export function ChannelCallAnalytics(props: Props) {
     return () => {
       cancelled = true
     }
-  }, [params, t])
+  }, [params, t, props.refreshKey])
 
   const chartData = useMemo(() => toQuotaDataItems(items), [items])
 

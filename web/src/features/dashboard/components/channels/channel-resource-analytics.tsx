@@ -16,6 +16,8 @@ export function ChannelResourceAnalytics() {
   const [range, setRange] = useState<ChannelTimeRange>(() =>
     resolveChannelTimeRange('day')
   )
+  // 刷新采集后递增，调用分析与渠道趋势据此重新拉取数据。
+  const [refreshKey, setRefreshKey] = useState(0)
 
   return (
     <div className='space-y-3 sm:space-y-4'>
@@ -24,9 +26,9 @@ export function ChannelResourceAnalytics() {
         <ChannelTimeRangePicker value={range} onChange={setRange} />
       </div>
 
-      <CurrentRuntimePanel />
-      <ChannelCallAnalytics range={range} />
-      <ChannelRuntimeTrends range={range} />
+      <CurrentRuntimePanel onRefresh={() => setRefreshKey((key) => key + 1)} />
+      <ChannelCallAnalytics range={range} refreshKey={refreshKey} />
+      <ChannelRuntimeTrends range={range} refreshKey={refreshKey} />
     </div>
   )
 }

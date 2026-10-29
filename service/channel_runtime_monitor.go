@@ -17,9 +17,12 @@ import (
 )
 
 const (
-	metricNumRequestsRunning      = "vllm:num_requests_running"
-	metricNumRequestsWaiting      = "vllm:num_requests_waiting"
-	metricMaxNumSeqs              = "vllm:max_num_seqs"
+	metricNumRequestsRunning = "vllm:num_requests_running"
+	metricNumRequestsWaiting = "vllm:num_requests_waiting"
+	metricMaxNumSeqs         = "vllm:max_num_seqs"
+	// vLLM 新版本（>= 0.9）把 KV cache 使用率改名为 vllm:kv_cache_usage_perc，
+	// 旧版本仍是 vllm:gpu_cache_usage_perc，两个名字都要识别。
+	metricKVCacheUsage            = "vllm:kv_cache_usage_perc"
 	metricGPUCacheUsage           = "vllm:gpu_cache_usage_perc"
 	metricPrefixCacheHitRate      = "vllm:gpu_prefix_cache_hit_rate"
 	metricPrefixCacheHits         = "vllm:prefix_cache_hits_total"
@@ -418,7 +421,7 @@ func parseVLLMMetrics(text string) vllmMetrics {
 			result.addWaiting(modelName, int(value))
 		case metricMaxNumSeqs:
 			result.addMaxNumSeqs(modelName, int(value))
-		case metricGPUCacheUsage:
+		case metricKVCacheUsage, metricGPUCacheUsage:
 			result.addCacheUsage(modelName, value)
 		case metricPrefixCacheHitRate:
 			result.addPrefixHitRate(modelName, value)

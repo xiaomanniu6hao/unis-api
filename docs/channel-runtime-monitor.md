@@ -70,7 +70,7 @@ base_url  ->  scheme://host + /metrics
 | `vllm:num_requests_running` | Running |
 | `vllm:num_requests_waiting` | Waiting |
 | `vllm:max_num_seqs` | 引擎最大并发（vLLM 不一定暴露） |
-| `vllm:gpu_cache_usage_perc` | KV cache 占用（0~1，入库乘 100） |
+| `vllm:kv_cache_usage_perc`（新版）/ `vllm:gpu_cache_usage_perc`（旧版） | KV cache 占用（0~1，入库乘 100）。vLLM ≥ 0.9 只暴露新名字，两个都要认 |
 | `vllm:gpu_prefix_cache_hit_rate` / `vllm:prefix_cache_hits_total` | 前缀命中率（无 gauge 时用 hits/queries 计算） |
 
 指标带 `model_name` 标签时按模型归属；不带标签时归属渠道的第一个模型。
@@ -175,7 +175,9 @@ UPDATE channel_runtime_limits SET peak_running = 0 WHERE channel_id = 1;
 | GET | `/api/channel_runtime/samples?channel_id=&model_name=&hours=&limit=` | channel read | 时序快照 |
 | GET | `/api/channel_runtime/limits` | channel read | 最大 batch 解析结果 |
 | GET | `/api/channel_runtime/channels` | channel read | 环境中的全部渠道（配置页默认行用，不含密钥） |
-| GET | `/api/channel_runtime/resource?hours=24` | channel read | 看板用：按渠道聚合的调用情况 + 拥挤程度 |
+| GET | `/api/channel_runtime/series?start_timestamp=&end_timestamp=&bucket_seconds=` | channel read | 看板用：按时间桶聚合的 Running/Waiting/最大 batch/吞吐 + 渠道清单 |
+| GET | `/api/channel_runtime/usage_series?start_timestamp=&end_timestamp=&bucket_seconds=` | channel read | 看板用：按渠道 × 时间桶聚合的 `logs` 调用量 |
+| GET | `/api/channel_runtime/resource?hours=24` | channel read | 旧版接口，保留但前端不再使用 |
 | POST | `/api/channel_runtime/refresh` | channel operate | 立即采集一次 |
 | POST | `/api/channel_runtime/:id/unlock` | channel operate | 手工解锁 |
 
@@ -183,11 +185,19 @@ UPDATE channel_runtime_limits SET peak_running = 0 WHERE channel_id = 1;
 
 位置：数据看板 → **渠道资源分析**（`/dashboard/channels`，仅管理员可见）。
 
-- **第一块「按渠道调用情况」**：渠道 × 时间窗（24h / 7d）的请求数、流量占比、错误率、平均耗时（不展示额度）。
-  数据来源 `logs` 表按 `channel_id` 聚合（成功计费日志 `type=2` + 错误日志 `type=5`）。
-- **第二块「渠道拥挤程度」**：按利用率（`Running / max_batch`）从高到低排序，每条渠道一根进度条，
-  ≥50% 蓝、≥80% 黄、≥100% 或已锁定红；右侧同时给出 `Running / max_batch`、`Waiting`、
-  `KV%` 与状态徽章（空闲/正常/繁忙/饱和/无数据）。每 10 秒自动刷新。
+页面从上到下三块，共用顶部的时间范围（当天 / 当周 / 当月 / 自定义）：
+
+- **当前运行时**：每个渠道一行，展示 Running / Waiting / 最大 batch / KV% / 前缀命中率 / 状态 / 采集时间，
+  每 10 秒自动刷新；右侧「刷新状态」会立即触发一次采集，并让下方「渠道调用分析」与每渠道趋势一起重新拉取
+  （采集是异步落库的，按钮触发后 2 秒再刷新一次）。
+- **渠道调用分析**：复用模型调用分析的趋势 / 分布 / 排行三张图。
+  数据来源是 `logs` 表的计费日志（`type=2`，按 `channel_id` 聚合），**只有经过网关的请求才会被统计**；
+  直连 vLLM 端口的压测流量不计入。
+- **每渠道趋势卡片**（调用并发数 / Prefill 性能 / Decode 性能）：
+  - 「调用并发数」是组合图：Running 曲线到 0 轴之间的区域按利用率着色 —— 空闲（`<50%`）绿、
+    正常（`≥50%`）蓝、繁忙（`≥80%`）黄、饱和（`≥100%`）红，与旧版拥挤度色标一致；
+    另叠加「最大 batch」与「请求数（Running + Waiting）」两条参考线。
+  - 「Prefill 性能 / Decode 性能」各一条吞吐曲线，单位 tokens/s。
 
 ## 10. 部署注意
 
