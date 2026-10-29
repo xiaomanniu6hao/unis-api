@@ -54,6 +54,8 @@ interface ModelChartsProps {
   loading?: boolean
   timeGranularity?: TimeGranularity
   defaultChartTab?: ModelAnalyticsChartTab
+  // 同一套趋势/分布/排行图表也用于渠道调用分析，标题由调用方指定。
+  titleKey?: string
 }
 
 export function ModelCharts(props: ModelChartsProps) {
@@ -126,7 +128,7 @@ export function ModelCharts(props: ModelChartsProps) {
             <PieChartIcon />
           </IconBadge>
           <div className='text-sm font-semibold'>
-            {t('Model Call Analytics')}
+            {t(props.titleKey ?? 'Model Call Analytics')}
           </div>
           <span className='text-muted-foreground text-xs'>
             {t('Total:')} {chartData.totalCountDisplay}

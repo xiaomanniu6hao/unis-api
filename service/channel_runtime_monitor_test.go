@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/QuantumNous/new-api/model"
@@ -18,6 +19,10 @@ vllm:gpu_cache_usage_perc{model_name="glm-5"} 0.523
 vllm:max_num_seqs{model_name="glm-5"} 32.0
 vllm:prefix_cache_queries_total{model_name="glm-5"} 100.0
 vllm:prefix_cache_hits_total{model_name="glm-5"} 92.0
+vllm:avg_prompt_throughput_toks_per_s{model_name="glm-5"} 3275.9
+vllm:avg_generation_throughput_toks_per_s{model_name="glm-5"} 716.7
+vllm:prompt_tokens_total{model_name="glm-5"} 1126400.0
+vllm:generation_tokens_total{model_name="glm-5"} 240000.0
 `
 
 const unlabeledMetricsText = `vllm:num_requests_running 5.0
@@ -35,6 +40,42 @@ func TestParseVLLMMetricsWithModelLabel(t *testing.T) {
 	assert.Equal(t, 32, series.MaxNumSeqs)
 	assert.InDelta(t, 52.3, series.GPUCacheUsage, 0.001)
 	assert.InDelta(t, 92, series.PrefixCacheHitRate, 0.001)
+	// prefill / decode 吞吐按 tokens/s 原样保存
+	assert.InDelta(t, 3275.9, series.PromptThroughput, 0.001)
+	assert.InDelta(t, 716.7, series.GenerationThroughput, 0.001)
+	// 累计 token 数用于旧版 vLLM 的吞吐估算
+	assert.InDelta(t, 1126400, series.PromptTokens, 0.001)
+	assert.InDelta(t, 240000, series.GenerationTokens, 0.001)
+}
+
+func TestDeriveCounterThroughputUsesTokenDelta(t *testing.T) {
+	const channelId = 991
+	const modelName = "glm-5"
+	t.Cleanup(func() {
+		channelRuntimeCounters.Delete(fmt.Sprintf("%d/%s", channelId, modelName))
+	})
+
+	// 第一次采集只记录基线，不产生吞吐
+	_, _, ok := deriveCounterThroughput(channelId, modelName, vllmMetricSeries{
+		PromptTokens: 1000, GenerationTokens: 500,
+	}, 100)
+	assert.False(t, ok)
+
+	// 10 秒内 prompt 增加 3000、generation 增加 1500
+	prompt, generation, ok := deriveCounterThroughput(channelId, modelName, vllmMetricSeries{
+		PromptTokens: 4000, GenerationTokens: 2000,
+	}, 110)
+	require.True(t, ok)
+	assert.InDelta(t, 300, prompt, 0.001)
+	assert.InDelta(t, 150, generation, 0.001)
+
+	// 实例重启导致计数器回退时不产生负值
+	prompt, generation, ok = deriveCounterThroughput(channelId, modelName, vllmMetricSeries{
+		PromptTokens: 10, GenerationTokens: 5,
+	}, 120)
+	require.True(t, ok)
+	assert.Zero(t, prompt)
+	assert.Zero(t, generation)
 }
 
 func TestParseVLLMMetricsWithoutLabels(t *testing.T) {

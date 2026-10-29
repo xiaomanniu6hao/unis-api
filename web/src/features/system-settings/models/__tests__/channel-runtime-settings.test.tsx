@@ -108,7 +108,7 @@ test('channel runtime section shows the saved options instead of the built-in de
   await renderModels('/system-settings/models/channel-runtime')
 
   expect(
-    await screen.findByRole('heading', { name: 'Channel Runtime Monitor' })
+    await screen.findByRole('heading', { name: 'Channel Runtime Configuration' })
   ).toBeVisible()
 
   // 启用采集在库里是 true，默认值是 false。
@@ -120,4 +120,12 @@ test('channel runtime section shows the saved options instead of the built-in de
   expect(inputForLabel('Default max batch')).toHaveValue(8)
   expect(inputForLabel('Waiting samples before lock')).toHaveValue(2)
   expect(inputForLabel('Max lock seconds')).toHaveValue(600)
+})
+
+test('channel runtime section only holds configuration, runtime table moved to the dashboard', async () => {
+  await renderModels('/system-settings/models/channel-runtime')
+  await screen.findByRole('heading', { name: 'Channel Runtime Configuration' })
+
+  expect(screen.queryByRole('heading', { name: 'Current runtime' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Refresh status' })).toBeNull()
 })

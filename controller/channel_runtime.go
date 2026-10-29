@@ -112,6 +112,175 @@ func GetChannelRuntimeSamples(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"success": true, "data": samples})
 }
 
+// channelRuntimeRange 解析看板趋势查询的时间范围与时间桶。
+// 未传参数时默认最近 24 小时；时间桶按范围内最多约 400 个点自动推导。
+func channelRuntimeRange(c *gin.Context) (startTs int64, endTs int64, bucketSeconds int64, ok bool) {
+	endTs = time.Now().Unix()
+	startTs = endTs - 86400
+	if raw, err := strconv.ParseInt(c.Query("start_timestamp"), 10, 64); err == nil && raw > 0 {
+		startTs = raw
+	}
+	if raw, err := strconv.ParseInt(c.Query("end_timestamp"), 10, 64); err == nil && raw > 0 {
+		endTs = raw
+	}
+	if endTs <= startTs {
+		return 0, 0, 0, false
+	}
+	// 最多回溯一年，避免一次查询扫过多历史数据
+	if maxStart := endTs - 366*86400; startTs < maxStart {
+		startTs = maxStart
+	}
+	bucketSeconds, _ = strconv.ParseInt(c.Query("bucket_seconds"), 10, 64)
+	if bucketSeconds <= 0 {
+		bucketSeconds = (endTs - startTs) / 400
+	}
+	if bucketSeconds < 10 {
+		bucketSeconds = 10
+	}
+	if bucketSeconds > 86400 {
+		bucketSeconds = 86400
+	}
+	return startTs, endTs, bucketSeconds, true
+}
+
+// channelRuntimeSeriesItem 是运行时趋势的一行，带上渠道名便于前端直接分组展示。
+type channelRuntimeSeriesItem struct {
+	ChannelId            int     `json:"channel_id"`
+	ChannelName          string  `json:"channel_name"`
+	ModelNames           string  `json:"model_names"`
+	Bucket               int64   `json:"bucket"`
+	AvgRunning           float64 `json:"avg_running"`
+	MaxRunning           int     `json:"max_running"`
+	AvgWaiting           float64 `json:"avg_waiting"`
+	MaxWaiting           int     `json:"max_waiting"`
+	MaxBatch             int     `json:"max_batch"`
+	AvgRequests          float64 `json:"avg_requests"`
+	PromptThroughput     float64 `json:"prompt_throughput"`
+	GenerationThroughput float64 `json:"generation_throughput"`
+	SampleCount          int     `json:"sample_count"`
+}
+
+// GetChannelRuntimeSeries 返回按时间桶聚合的运行时趋势：
+// Running / Waiting / 最大 batch / prefill 与 decode 吞吐，供看板画渠道趋势图。
+func GetChannelRuntimeSeries(c *gin.Context) {
+	startTs, endTs, bucketSeconds, ok := channelRuntimeRange(c)
+	if !ok {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的时间范围"})
+		return
+	}
+	channelId, _ := strconv.Atoi(c.Query("channel_id"))
+	points, err := model.GetChannelRuntimeSeries(channelId, startTs, endTs, bucketSeconds)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	metas, err := model.GetChannelRuntimeMeta()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	names := make(map[int]model.ChannelMeta, len(metas))
+	channels := make([]channelRuntimeChannelItem, 0, len(metas))
+	for _, meta := range metas {
+		names[meta.Id] = meta
+		channels = append(channels, channelRuntimeChannelItem{
+			Id:     meta.Id,
+			Name:   meta.Name,
+			Models: splitChannelModels(meta.Models),
+			Status: meta.Status,
+		})
+	}
+	items := make([]channelRuntimeSeriesItem, 0, len(points))
+	for _, point := range points {
+		item := channelRuntimeSeriesItem{
+			ChannelId:            point.ChannelId,
+			Bucket:               point.Bucket,
+			AvgRunning:           point.AvgRunning,
+			MaxRunning:           point.MaxRunning,
+			AvgWaiting:           point.AvgWaiting,
+			MaxWaiting:           point.MaxWaiting,
+			MaxBatch:             point.MaxBatch,
+			AvgRequests:          point.AvgRequests,
+			PromptThroughput:     point.PromptThroughput,
+			GenerationThroughput: point.GenerationThroughput,
+			SampleCount:          point.SampleCount,
+		}
+		if meta, found := names[point.ChannelId]; found {
+			item.ChannelName = meta.Name
+			item.ModelNames = meta.Models
+		}
+		items = append(items, item)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"start_timestamp": startTs,
+			"end_timestamp":   endTs,
+			"bucket_seconds":  bucketSeconds,
+			"items":           items,
+			"channels":        channels,
+		},
+	})
+}
+
+// channelUsageSeriesItem 是渠道调用趋势的一行（带渠道名，前端无需二次关联）。
+type channelUsageSeriesItem struct {
+	ChannelId        int    `json:"channel_id"`
+	ChannelName      string `json:"channel_name"`
+	ModelNames       string `json:"model_names"`
+	Bucket           int64  `json:"bucket"`
+	Requests         int64  `json:"requests"`
+	PromptTokens     int64  `json:"prompt_tokens"`
+	CompletionTokens int64  `json:"completion_tokens"`
+}
+
+// GetChannelUsageSeries 返回按渠道 + 时间桶聚合的调用量，供看板「渠道调用分析」。
+func GetChannelUsageSeries(c *gin.Context) {
+	startTs, endTs, bucketSeconds, ok := channelRuntimeRange(c)
+	if !ok {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": "无效的时间范围"})
+		return
+	}
+	points, err := model.SumChannelUsageSeries(startTs, endTs, bucketSeconds)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	metas, err := model.GetChannelRuntimeMeta()
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	names := make(map[int]model.ChannelMeta, len(metas))
+	for _, meta := range metas {
+		names[meta.Id] = meta
+	}
+	items := make([]channelUsageSeriesItem, 0, len(points))
+	for _, point := range points {
+		item := channelUsageSeriesItem{
+			ChannelId:        point.ChannelId,
+			Bucket:           point.Bucket,
+			Requests:         point.Requests,
+			PromptTokens:     point.PromptTokens,
+			CompletionTokens: point.CompletionTokens,
+		}
+		if meta, found := names[point.ChannelId]; found {
+			item.ChannelName = meta.Name
+			item.ModelNames = meta.Models
+		}
+		items = append(items, item)
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"start_timestamp": startTs,
+			"end_timestamp":   endTs,
+			"bucket_seconds":  bucketSeconds,
+			"items":           items,
+		},
+	})
+}
+
 // GetChannelRuntimeLimits 返回渠道维度的最大 batch 解析结果。
 func GetChannelRuntimeLimits(c *gin.Context) {
 	limits, err := model.GetChannelRuntimeLimits()
@@ -130,6 +299,17 @@ type channelRuntimeChannelItem struct {
 	Status int      `json:"status"`
 }
 
+// splitChannelModels 把渠道 models 字段（逗号分隔）拆成列表，空值返回空数组。
+func splitChannelModels(raw string) []string {
+	names := make([]string, 0)
+	for _, name := range strings.Split(raw, ",") {
+		if name = strings.TrimSpace(name); name != "" {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
 // GetChannelRuntimeChannels 返回环境中的全部渠道（不含密钥），
 // 供配置页把最大 batch / 长度分离的默认行预填成真实渠道。
 func GetChannelRuntimeChannels(c *gin.Context) {
@@ -140,16 +320,10 @@ func GetChannelRuntimeChannels(c *gin.Context) {
 	}
 	items := make([]channelRuntimeChannelItem, 0, len(metas))
 	for _, meta := range metas {
-		channelModels := make([]string, 0)
-		for _, name := range strings.Split(meta.Models, ",") {
-			if name = strings.TrimSpace(name); name != "" {
-				channelModels = append(channelModels, name)
-			}
-		}
 		items = append(items, channelRuntimeChannelItem{
 			Id:     meta.Id,
 			Name:   meta.Name,
-			Models: channelModels,
+			Models: splitChannelModels(meta.Models),
 			Status: meta.Status,
 		})
 	}

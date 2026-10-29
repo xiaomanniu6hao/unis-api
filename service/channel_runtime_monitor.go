@@ -17,13 +17,19 @@ import (
 )
 
 const (
-	metricNumRequestsRunning = "vllm:num_requests_running"
-	metricNumRequestsWaiting = "vllm:num_requests_waiting"
-	metricMaxNumSeqs         = "vllm:max_num_seqs"
-	metricGPUCacheUsage      = "vllm:gpu_cache_usage_perc"
-	metricPrefixCacheHitRate = "vllm:gpu_prefix_cache_hit_rate"
-	metricPrefixCacheHits    = "vllm:prefix_cache_hits_total"
-	metricPrefixCacheQueries = "vllm:prefix_cache_queries_total"
+	metricNumRequestsRunning      = "vllm:num_requests_running"
+	metricNumRequestsWaiting      = "vllm:num_requests_waiting"
+	metricMaxNumSeqs              = "vllm:max_num_seqs"
+	metricGPUCacheUsage           = "vllm:gpu_cache_usage_perc"
+	metricPrefixCacheHitRate      = "vllm:gpu_prefix_cache_hit_rate"
+	metricPrefixCacheHits         = "vllm:prefix_cache_hits_total"
+	metricPrefixCacheQueries      = "vllm:prefix_cache_queries_total"
+	metricAvgPromptThroughput     = "vllm:avg_prompt_throughput_toks_per_s"
+	metricAvgGenerationThroughput = "vllm:avg_generation_throughput_toks_per_s"
+	// 部分 vLLM 版本不暴露 avg_*_throughput gauge，只用累计 token 计数器，
+	// 此时用两次采集间的增量估算吞吐（tokens/s）。
+	metricPromptTokensTotal     = "vllm:prompt_tokens_total"
+	metricGenerationTokensTotal = "vllm:generation_tokens_total"
 
 	// runtimeCleanupInterval 控制过期时序数据的清理频率
 	runtimeCleanupInterval = 10 * time.Minute
@@ -43,6 +49,8 @@ var (
 	// channelRuntimeLastFailureLog 记录每个渠道上次失败日志时间，避免刷屏
 	channelRuntimeLastFailureLog sync.Map // channelId -> int64
 	channelRuntimeLastCleanup    atomic.Int64
+	// channelRuntimeCounters 保存上次采集的累计 token 数，用于估算吞吐
+	channelRuntimeCounters sync.Map // "channelId/modelName" -> channelRuntimeCounter
 )
 
 // StartChannelRuntimeMonitor 启动运行时指标采集循环。
@@ -238,19 +246,29 @@ func collectChannelRuntime(
 	}
 	maxBatch, source := resolveChannelMaxBatch(setting, channel.Name, scraped.Total.MaxNumSeqs)
 
+	now := time.Now().Unix()
 	samples := make([]model.ChannelRuntimeSample, 0, len(modelNames))
 	for _, modelName := range modelNames {
 		series := scraped.SeriesFor(modelName)
+		// 实例没有 avg_*_throughput 指标时，用累计 token 增量估算当前吞吐。
+		if series.PromptThroughput == 0 && series.GenerationThroughput == 0 {
+			if promptTP, generationTP, ok := deriveCounterThroughput(channel.Id, modelName, series, now); ok {
+				series.PromptThroughput = promptTP
+				series.GenerationThroughput = generationTP
+			}
+		}
 		samples = append(samples, model.ChannelRuntimeSample{
-			ChannelId:          channel.Id,
-			ModelName:          modelName,
-			CollectedAt:        collectedAt,
-			Running:            series.Running,
-			Waiting:            series.Waiting,
-			MaxBatch:           maxBatch,
-			KVCacheUsage:       series.GPUCacheUsage,
-			PrefixCacheHitRate: series.PrefixCacheHitRate,
-			Locked:             lockedAtCollection,
+			ChannelId:            channel.Id,
+			ModelName:            modelName,
+			CollectedAt:          collectedAt,
+			Running:              series.Running,
+			Waiting:              series.Waiting,
+			MaxBatch:             maxBatch,
+			KVCacheUsage:         series.GPUCacheUsage,
+			PrefixCacheHitRate:   series.PrefixCacheHitRate,
+			PromptThroughput:     series.PromptThroughput,
+			GenerationThroughput: series.GenerationThroughput,
+			Locked:               lockedAtCollection,
 		})
 	}
 
@@ -339,11 +357,24 @@ func logChannelRuntimeFailure(channelId int, err error) {
 
 // vllmMetricSeries 是单个模型（或无标签时的整机）的一组运行时指标。
 type vllmMetricSeries struct {
-	Running            int
-	Waiting            int
-	MaxNumSeqs         int
-	GPUCacheUsage      float64
-	PrefixCacheHitRate float64
+	Running              int
+	Waiting              int
+	MaxNumSeqs           int
+	GPUCacheUsage        float64
+	PrefixCacheHitRate   float64
+	PromptThroughput     float64
+	GenerationThroughput float64
+	// PromptTokens / GenerationTokens 是累计 token 数（counter），
+	// 仅用于在实例没有 avg_*_throughput 指标时按增量估算吞吐。
+	PromptTokens     float64
+	GenerationTokens float64
+}
+
+// channelRuntimeCounter 是一次采集到的累计 token 数与采集时刻。
+type channelRuntimeCounter struct {
+	PromptTokens     float64
+	GenerationTokens float64
+	At               int64
 }
 
 // vllmMetrics 解析后的结果，ByModel 仅在指标带 model_name 标签时填充，合计值放在 Total。
@@ -403,6 +434,14 @@ func parseVLLMMetrics(text string) vllmMetrics {
 			} else {
 				hitModelQueries[modelName] += value
 			}
+		case metricAvgPromptThroughput:
+			result.addThroughput(modelName, value, true)
+		case metricAvgGenerationThroughput:
+			result.addThroughput(modelName, value, false)
+		case metricPromptTokensTotal:
+			result.addTokenCounter(modelName, value, true)
+		case metricGenerationTokensTotal:
+			result.addTokenCounter(modelName, value, false)
 		}
 	}
 
@@ -465,6 +504,73 @@ func (m *vllmMetrics) addCacheUsage(modelName string, value float64) {
 		series.GPUCacheUsage = usage
 	}
 	m.ByModel[modelName] = series
+}
+
+// addThroughput 记录 prompt / generation 吞吐（tokens/s）。
+// 一个实例多模型时按模型各有一行，合计值相加。
+func (m *vllmMetrics) addThroughput(modelName string, value float64, prompt bool) {
+	if prompt {
+		m.Total.PromptThroughput += value
+	} else {
+		m.Total.GenerationThroughput += value
+	}
+	if modelName == "" {
+		return
+	}
+	series := m.ByModel[modelName]
+	if prompt {
+		series.PromptThroughput = value
+	} else {
+		series.GenerationThroughput = value
+	}
+	m.ByModel[modelName] = series
+}
+
+// addTokenCounter 累加累计 token 数，一个渠道可能有多个实例/engine 行。
+func (m *vllmMetrics) addTokenCounter(modelName string, value float64, prompt bool) {
+	if prompt {
+		m.Total.PromptTokens += value
+	} else {
+		m.Total.GenerationTokens += value
+	}
+	if modelName == "" {
+		return
+	}
+	series := m.ByModel[modelName]
+	if prompt {
+		series.PromptTokens += value
+	} else {
+		series.GenerationTokens += value
+	}
+	m.ByModel[modelName] = series
+}
+
+// deriveCounterThroughput 用两次采集间累计 token 的增量估算吞吐（tokens/s）。
+// 首次采集、计数器回退（实例重启）或时间间隔异常时返回 false，调用方保留原值。
+func deriveCounterThroughput(channelId int, modelName string, series vllmMetricSeries, now int64) (float64, float64, bool) {
+	key := fmt.Sprintf("%d/%s", channelId, modelName)
+	previous, ok := channelRuntimeCounters.Load(key)
+	channelRuntimeCounters.Store(key, channelRuntimeCounter{
+		PromptTokens:     series.PromptTokens,
+		GenerationTokens: series.GenerationTokens,
+		At:               now,
+	})
+	if !ok {
+		return 0, 0, false
+	}
+	prev := previous.(channelRuntimeCounter)
+	elapsed := now - prev.At
+	if elapsed <= 0 {
+		return 0, 0, false
+	}
+	var prompt, generation float64
+	if series.PromptTokens >= prev.PromptTokens {
+		prompt = (series.PromptTokens - prev.PromptTokens) / float64(elapsed)
+	}
+	if series.GenerationTokens >= prev.GenerationTokens {
+		generation = (series.GenerationTokens - prev.GenerationTokens) / float64(elapsed)
+	}
+	return prompt, generation, true
 }
 
 func (m *vllmMetrics) addPrefixHitRate(modelName string, value float64) {

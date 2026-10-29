@@ -23,7 +23,10 @@ type ChannelRuntimeSample struct {
 	MaxBatch           int     `json:"max_batch"`
 	KVCacheUsage       float64 `json:"kv_cache_usage"`
 	PrefixCacheHitRate float64 `json:"prefix_cache_hit_rate"`
-	Locked             bool    `json:"locked"`
+	// PromptThroughput / GenerationThroughput 是 vLLM 暴露的平均 prefill / decode 吞吐（tokens/s）。
+	PromptThroughput     float64 `json:"prompt_throughput"`
+	GenerationThroughput float64 `json:"generation_throughput"`
+	Locked               bool    `json:"locked"`
 }
 
 func (ChannelRuntimeSample) TableName() string {
@@ -486,8 +489,64 @@ func GetChannelRuntimeSamples(channelId int, modelName string, startTs int64, en
 	if limit <= 0 || limit > 10000 {
 		limit = 2000
 	}
-	err := query.Order("collected_at DESC").Limit(limit).Find(&samples).Error
+	// 后加的列（吞吐等）在历史样本里是 NULL，直接扫描进 int/float64 会报错，
+	// 这里逐列 COALESCE 成 0，保证老数据也能正常返回。
+	err := query.Select("id, channel_id, model_name, collected_at, " +
+		"COALESCE(running, 0) AS running, COALESCE(waiting, 0) AS waiting, " +
+		"COALESCE(max_batch, 0) AS max_batch, COALESCE(kv_cache_usage, 0) AS kv_cache_usage, " +
+		"COALESCE(prefix_cache_hit_rate, 0) AS prefix_cache_hit_rate, " +
+		"COALESCE(prompt_throughput, 0) AS prompt_throughput, " +
+		"COALESCE(generation_throughput, 0) AS generation_throughput, " +
+		"COALESCE(locked, 0) AS locked").
+		Order("collected_at DESC").Limit(limit).Find(&samples).Error
 	return samples, err
+}
+
+// ChannelRuntimeSeriesPoint 是一个渠道在一个时间桶内的运行时聚合值。
+// 时间桶按 bucket_seconds 对齐，跨数据库统一用 FLOOR(ts / bucket) * bucket。
+type ChannelRuntimeSeriesPoint struct {
+	ChannelId            int     `json:"channel_id"`
+	Bucket               int64   `json:"bucket"`
+	AvgRunning           float64 `json:"avg_running"`
+	MaxRunning           int     `json:"max_running"`
+	AvgWaiting           float64 `json:"avg_waiting"`
+	MaxWaiting           int     `json:"max_waiting"`
+	MaxBatch             int     `json:"max_batch"`
+	AvgRequests          float64 `json:"avg_requests"`
+	PromptThroughput     float64 `json:"prompt_throughput"`
+	GenerationThroughput float64 `json:"generation_throughput"`
+	SampleCount          int     `json:"sample_count"`
+}
+
+// GetChannelRuntimeSeries 按时间桶聚合运行时样本，用于看板画趋势线。
+// channelId <= 0 时返回全部渠道；bucketSeconds 至少 10 秒，避免时间范围内点过多。
+func GetChannelRuntimeSeries(channelId int, startTs int64, endTs int64, bucketSeconds int64) ([]ChannelRuntimeSeriesPoint, error) {
+	if bucketSeconds < 10 {
+		bucketSeconds = 10
+	}
+	bucketExpr := fmt.Sprintf("FLOOR(collected_at / %d) * %d", bucketSeconds, bucketSeconds)
+	var points []ChannelRuntimeSeriesPoint
+	// 吞吐列是后加的，历史样本为 NULL；COALESCE 保证聚合结果不会是 NULL
+	// （NULL 扫描进 float64 会直接报错）。
+	query := DB.Model(&ChannelRuntimeSample{}).
+		Select("channel_id, "+bucketExpr+" AS bucket, "+
+			"AVG(COALESCE(running, 0)) AS avg_running, MAX(COALESCE(running, 0)) AS max_running, "+
+			"AVG(COALESCE(waiting, 0)) AS avg_waiting, MAX(COALESCE(waiting, 0)) AS max_waiting, "+
+			"MAX(COALESCE(max_batch, 0)) AS max_batch, "+
+			"AVG(COALESCE(running, 0) + COALESCE(waiting, 0)) AS avg_requests, "+
+			// 吞吐列升级前的样本为 NULL；用 COALESCE(AVG(...), 0) 让 NULL 不参与均值，
+			// 全部为 NULL 的桶再回退到 0。
+			"COALESCE(AVG(prompt_throughput), 0) AS prompt_throughput, "+
+			"COALESCE(AVG(generation_throughput), 0) AS generation_throughput, "+
+			"COUNT(*) AS sample_count").
+		Where("collected_at >= ? AND collected_at <= ?", startTs, endTs)
+	if channelId > 0 {
+		query = query.Where("channel_id = ?", channelId)
+	}
+	err := query.Group("channel_id, " + bucketExpr).
+		Order("bucket ASC, channel_id ASC").
+		Scan(&points).Error
+	return points, err
 }
 
 // DeleteChannelRuntimeSamplesBefore 清理过期的时序数据。
@@ -544,6 +603,35 @@ type ChannelUsageSummary struct {
 	PromptTokens     int64   `json:"prompt_tokens"`
 	CompletionTokens int64   `json:"completion_tokens"`
 	AvgUseTimeMs     float64 `json:"avg_use_time_ms"`
+}
+
+// ChannelUsageSeriesPoint 是一个渠道在一个时间桶内的调用量（来自 logs 表）。
+type ChannelUsageSeriesPoint struct {
+	ChannelId        int   `json:"channel_id"`
+	Bucket           int64 `json:"bucket"`
+	Requests         int64 `json:"requests"`
+	PromptTokens     int64 `json:"prompt_tokens"`
+	CompletionTokens int64 `json:"completion_tokens"`
+}
+
+// SumChannelUsageSeries 按渠道 + 时间桶聚合调用量，供看板「渠道调用分析」画趋势/分布/排行。
+// 时间桶表达式与 GetChannelRuntimeSeries 一致：FLOOR(ts / bucket) * bucket，
+// MySQL / PostgreSQL / SQLite / ClickHouse 的日志库都支持。
+func SumChannelUsageSeries(startTs int64, endTs int64, bucketSeconds int64) ([]ChannelUsageSeriesPoint, error) {
+	if bucketSeconds < 10 {
+		bucketSeconds = 10
+	}
+	bucketExpr := fmt.Sprintf("FLOOR(created_at / %d) * %d", bucketSeconds, bucketSeconds)
+	var points []ChannelUsageSeriesPoint
+	err := LOG_DB.Table("logs").
+		Select("channel_id, "+bucketExpr+" AS bucket, COUNT(*) AS requests, "+
+			"COALESCE(SUM(prompt_tokens), 0) AS prompt_tokens, "+
+			"COALESCE(SUM(completion_tokens), 0) AS completion_tokens").
+		Where("type = ? AND created_at >= ? AND created_at <= ?", LogTypeConsume, startTs, endTs).
+		Group("channel_id, " + bucketExpr).
+		Order("bucket ASC, channel_id ASC").
+		Scan(&points).Error
+	return points, err
 }
 
 // SumChannelUsageByWindow 按渠道聚合时间窗内的调用情况（成功计费日志 + 错误日志）。

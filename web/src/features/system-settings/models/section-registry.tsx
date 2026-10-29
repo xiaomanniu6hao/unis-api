@@ -124,7 +124,7 @@ const MODELS_SECTIONS = [
 
   {
     id: 'channel-runtime',
-    titleKey: 'Channel Runtime Monitor',
+    titleKey: 'Channel Runtime Configuration',
     build: (settings: ModelSettings) => (
       <ChannelRuntimeSection
         defaultValues={{

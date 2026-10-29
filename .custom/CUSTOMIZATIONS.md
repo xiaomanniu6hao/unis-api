@@ -136,6 +136,12 @@
   - 长度分离改为扁平表 `{model_name, channel_name, min_length, max_length, enabled}`，区间 `[0,0]` 表示无上限，**下界最大者优先**；渠道名→id 解析带 60s TTL 缓存
   - 看板「按渠道调用情况」去掉「额度」列（后端不再聚合 quota）
   - 旧键 `scrape_timeout_ms` / `sample_retention_hours` / `scrape_only_channels` / 旧 `length_routing_rules`（regex+segments 格式）升级后失效，需重新配置
+- **三次优化（看板重构）**:
+  - 新增采集 `vllm:avg_prompt_throughput_toks_per_s` / `vllm:avg_generation_throughput_toks_per_s`，落库字段 `prompt_throughput` / `generation_throughput`；实例未暴露这两个 gauge 时（本机 vLLM v0.32 即如此），用 `vllm:prompt_tokens_total` / `vllm:generation_tokens_total` 两次采集的增量估算 tokens/s
+  - 新增 API：`GET /api/channel_runtime/series`（按时间桶聚合 Running/Waiting/max_batch/prefill/decode 吞吐 + 渠道清单）、`GET /api/channel_runtime/usage_series`（按渠道 + 时间桶聚合 logs 调用量）
+  - 配置页更名为「渠道运行时配置」，只保留配置项；「当前运行时」表格（含刷新采集、解锁）移到看板「渠道资源分析」
+  - 看板「渠道资源分析」改为：时间范围（当天 / 当周 / 当月 / 自定义）+ 当前运行时 + 渠道调用分析（复用模型调用分析的调用趋势 / 调用次数分布 / 调用次数排行）+ 每渠道趋势卡片（调用并发数 / 实时 prefill 性能 / 实时 decode 性能）
+  - `/api/channel_runtime/resource` 保留但前端不再使用
 - **回滚**: 删新增文件 + 停用 `main.go` 中 `StartChannelRuntimeMonitor()` + 撤路由组与 AutoMigrate 注册
 
 ---

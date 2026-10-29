@@ -18,7 +18,12 @@ For commercial licensing, please contact support@quantumnous.com
 */
 import { api } from '@/lib/api'
 
-import type { ChannelResourceResponse } from './components/channels/types'
+import type {
+  ChannelRuntimeSeriesResponse,
+  ChannelRuntimeStatusResponse,
+  ChannelSeriesResponse,
+  ChannelUsageSeriesItem,
+} from './components/channels/types'
 import type {
   FlowQuotaDataItem,
   QuotaDataItem,
@@ -123,11 +128,58 @@ export async function getUptimeStatus() {
 // Channel Resource Analytics
 // ----------------------------------------------------------------------------
 
-// 按渠道聚合的调用情况 + 当前 Running/Waiting/最大 batch（渠道资源分析页）
-export async function getChannelResourceStats(hours = 24) {
-  const res = await api.get<{ success: boolean; data: ChannelResourceResponse }>(
-    '/api/channel_runtime/resource',
-    { params: { hours } }
+// 各渠道当前运行时状态（Running/Waiting/锁状态），看板「当前运行时」表格
+export async function getChannelRuntimeStatus() {
+  const res = await api.get<{
+    success: boolean
+    message?: string
+    data?: ChannelRuntimeStatusResponse
+  }>('/api/channel_runtime/status', {
+    disableDuplicate: true,
+  } as Record<string, unknown>)
+  return res.data
+}
+
+// 按时间桶聚合的运行时趋势（Running/Waiting/MaxBatch/prefill/decode 吞吐）
+export async function getChannelRuntimeSeries(params: {
+  start_timestamp: number
+  end_timestamp: number
+  bucket_seconds: number
+}) {
+  const res = await api.get<{
+    success: boolean
+    message?: string
+    data?: ChannelRuntimeSeriesResponse
+  }>('/api/channel_runtime/series', { params })
+  return res.data
+}
+
+// 按渠道 + 时间桶聚合的调用量（渠道调用分析的趋势/分布/排行）
+export async function getChannelUsageSeries(params: {
+  start_timestamp: number
+  end_timestamp: number
+  bucket_seconds: number
+}) {
+  const res = await api.get<{
+    success: boolean
+    message?: string
+    data?: ChannelSeriesResponse<ChannelUsageSeriesItem>
+  }>('/api/channel_runtime/usage_series', { params })
+  return res.data
+}
+
+// 立即触发一次采集
+export async function refreshChannelRuntime() {
+  const res = await api.post<{ success: boolean; message?: string }>(
+    '/api/channel_runtime/refresh'
+  )
+  return res.data
+}
+
+// 手工解除渠道饱和锁
+export async function unlockChannelRuntime(channelId: number) {
+  const res = await api.post<{ success: boolean; message?: string }>(
+    `/api/channel_runtime/${channelId}/unlock`
   )
   return res.data
 }
