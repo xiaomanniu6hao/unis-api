@@ -88,16 +88,19 @@ test('switches every channel card to the prefill throughput series', async () =>
 
   await user.click(
     screen.getAllByRole('button', {
-      name: 'Realtime prefill performance',
+      name: 'Prefill performance',
     })[0]
   )
 
   await waitFor(() => expect(vchart).toHaveBeenCalled())
   const spec = vchart.mock.calls.at(-1)?.[0].spec as {
+    title?: { text?: string }
     data: { values: { Series: string; Value: number }[] }[]
   }
-  expect(spec.data[0].values[0].Series).toBe('Realtime prefill performance')
+  expect(spec.data[0].values[0].Series).toBe('Prefill performance')
   expect(spec.data[0].values[0].Value).toBe(3275.9)
+  // 图表标题与 tooltip 统一使用 tokens/s
+  expect(spec.title?.text).toBe('Prefill performance (tokens/s)')
 })
 
 test('requests a range-aligned bucket size for the selected window', async () => {

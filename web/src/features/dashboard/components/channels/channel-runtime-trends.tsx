@@ -47,8 +47,8 @@ type TrendTab = 'concurrency' | 'prefill' | 'decode'
 
 const TREND_TABS: Array<{ value: TrendTab; labelKey: string }> = [
   { value: 'concurrency', labelKey: 'Concurrency' },
-  { value: 'prefill', labelKey: 'Realtime prefill performance' },
-  { value: 'decode', labelKey: 'Realtime decode performance' },
+  { value: 'prefill', labelKey: 'Prefill performance' },
+  { value: 'decode', labelKey: 'Decode performance' },
 ]
 
 interface Props {

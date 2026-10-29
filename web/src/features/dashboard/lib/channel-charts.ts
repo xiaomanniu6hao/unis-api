@@ -33,7 +33,8 @@ function buildLineSpec(
   seriesNames: string[],
   title: string,
   dataId: string,
-  t: TFunction
+  t: TFunction,
+  valueUnit?: string
 ): ChartSpec {
   return {
     type: 'line',
@@ -59,7 +60,8 @@ function buildLineSpec(
         content: [
           {
             key: (datum: Record<string, unknown>) => datum?.Series,
-            value: (datum: Record<string, unknown>) => datum?.Value,
+            value: (datum: Record<string, unknown>) =>
+              valueUnit ? `${datum?.Value} ${valueUnit}` : datum?.Value,
           },
         ],
       },
@@ -106,7 +108,7 @@ export function buildChannelConcurrencySpec(
   )
 }
 
-// 实时性能：prefill / decode 各一条吞吐曲线（tokens/s）。
+// Prefill / decode 性能：各一条吞吐曲线，单位统一为 tokens/s。
 export function buildChannelThroughputSpec(
   points: ChannelRuntimeSeriesItem[],
   bucketSeconds: number,
@@ -114,9 +116,8 @@ export function buildChannelThroughputSpec(
   t: TFunction
 ): ChartSpec {
   const title =
-    metric === 'prompt'
-      ? t('Realtime prefill performance')
-      : t('Realtime decode performance')
+    metric === 'prompt' ? t('Prefill performance') : t('Decode performance')
+  const unit = 'tokens/s'
   const values = points.map((point) => ({
     Time: formatChannelBucket(bucketSeconds, point.bucket),
     Series: title,
@@ -127,5 +128,12 @@ export function buildChannelThroughputSpec(
       ).toFixed(1)
     ),
   }))
-  return buildLineSpec(values, [title], title, `channel-${metric}`, t)
+  return buildLineSpec(
+    values,
+    [title],
+    `${title} (${unit})`,
+    `channel-${metric}`,
+    t,
+    unit
+  )
 }
