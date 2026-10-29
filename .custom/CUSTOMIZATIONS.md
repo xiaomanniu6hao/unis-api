@@ -146,6 +146,9 @@
   - KV% 一直为 0：vLLM ≥ 0.9 只暴露 `vllm:kv_cache_usage_perc`，采集端同时识别新名字与旧的 `vllm:gpu_cache_usage_perc`
   - 「调用并发数」改为组合图（`type: 'common'`）：Running 到 0 轴之间按利用率着色（空闲绿 / 正常蓝 / 繁忙黄 / 饱和红），叠加最大 batch 与请求数两条参考线
   - 「当前运行时」的「刷新状态」改为整页刷新：触发采集后立即刷新调用分析与每渠道趋势，2 秒（采集落库）后再刷新一次
+- **五次优化（长度分流准度 + 在途请求数）**:
+  - 长度分流按真实 prompt token 数计：旧实现用 `tokenkit.Estimate`（按字符权重，中文 0.85 token/字），对 Qwen 高估约 1.7 倍，2400 token 的请求被算成 4100 而误命中 `[4096, 0)` 的长上下文规则 —— `.104` 收到了短请求。改为 BPE 代理计数：CJK 字符占比 ≥ 20% 用 o200k（4800 汉字：真实 2408 / o200k 2400），否则用 cl100k（22500 字符英文：真实 4507 / cl100k 4499）；请求体只对前 16KB 精确计数，更大按体积外推
+  - 「调用并发数」的参考线从 `avg_requests`（桶内均值，会出现 22.18 这种小数）改为 `max_requests`（桶内 Running+Waiting 峰值），图例更名为「峰值在途请求」；后端 `/series` 新增 `max_requests` 字段
 - **回滚**: 删新增文件 + 停用 `main.go` 中 `StartChannelRuntimeMonitor()` + 撤路由组与 AutoMigrate 注册
 
 ---

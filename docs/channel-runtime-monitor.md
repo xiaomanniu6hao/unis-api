@@ -148,6 +148,35 @@ UPDATE channel_runtime_limits SET peak_running = 0 WHERE channel_id = 1;
 - `length_routing_fallback = true`（默认）：集合内没有可用渠道时退回全量候选，避免配置写错直接 503。
 - 请求体超过 8MB 直接按"超长"处理，不做全文遍历。
 
+### 长度怎么算（token 计数规则）
+
+分流边界是**真实 prompt token 数**，所以计数方式必须贴近模型自己的 tokenizer：
+
+| 模型 | 计数方式 |
+| --- | --- |
+| OpenAI 家族（`gpt-*`、`o1/o3/o4`、`chatgpt`） | 自己的 tiktoken 编码（o200k / cl100k）精确计数 |
+| 其他模型（qwen、glm、deepseek 等，tokenkit 认不出家族） | 按文本语种选 **BPE 代理编码**：CJK 字符占比 ≥ 20% 用 o200k（`gpt-4o`），否则用 cl100k（`gpt-4`） |
+
+> 为什么不用 `tokenkit.Estimate`：它是按字符权重累加的启发式（中文每字 0.85 token），
+> 对 Qwen 这类分词器高估约 **1.7 倍**——实测 4800 个汉字：Estimate 4080，
+> 两者的真实值见下表。旧的字符权重会让 2400 token 的请求算成 4100，
+> 跨过 4096 的边界跑进长上下文渠道（.104 收到本该走 .204 的短请求）。
+>
+> 代理编码的选择依据（同一批请求，vLLM 返回的真实 `prompt_tokens` 做基准）：
+
+| 样本 | 真实 token | `Estimate` | o200k | cl100k |
+| --- | --- | --- | --- | --- |
+| 4800 汉字 | 2408 | 4080（+69%） | **2400（0%）** | 3200（+33%） |
+| 22500 字符英文 | 4507 | 5042（+12%） | 4000（−11%） | **4499（0%）** |
+
+> 纯中文、纯英文都能精确命中；混合文本取其中一个编码，最坏偏差约 15%。
+
+计数范围是**整个请求体**（含 JSON 结构，约几十 token 的固定开销），不计响应。
+
+> 性能：BPE 计数是纯 Go 实现，约 1MB/s，所以只对前 **16KB** 做精确计数；
+> 更大的请求体按「样本 token 数 × 总体积 / 样本体积」外推。
+> 分流边界附近的请求体通常只有几 KB，能拿到精确值；远超边界的请求体只需要量级正确。
+
 ## 7. 配置项总表
 
 配置整体存于 `options` 表，键前缀 `channel_runtime_setting.`，后台「系统管理 → 模型与路由 → 渠道运行时监控」可视化编辑。
@@ -176,7 +205,7 @@ UPDATE channel_runtime_limits SET peak_running = 0 WHERE channel_id = 1;
 | GET | `/api/channel_runtime/samples?channel_id=&model_name=&hours=&limit=` | channel read | 时序快照 |
 | GET | `/api/channel_runtime/limits` | channel read | 最大 batch 解析结果 |
 | GET | `/api/channel_runtime/channels` | channel read | 环境中的全部渠道（配置页默认行用，不含密钥） |
-| GET | `/api/channel_runtime/series?start_timestamp=&end_timestamp=&bucket_seconds=` | channel read | 看板用：按时间桶聚合的 Running/Waiting/最大 batch/吞吐 + 渠道清单 |
+| GET | `/api/channel_runtime/series?start_timestamp=&end_timestamp=&bucket_seconds=` | channel read | 看板用：按时间桶聚合的 Running/Waiting/最大 batch/吞吐（含 `avg_requests` 均值与 `max_requests` 峰值）+ 渠道清单 |
 | GET | `/api/channel_runtime/usage_series?start_timestamp=&end_timestamp=&bucket_seconds=` | channel read | 看板用：按渠道 × 时间桶聚合的 `logs` 调用量 |
 | GET | `/api/channel_runtime/resource?hours=24` | channel read | 旧版接口，保留但前端不再使用 |
 | POST | `/api/channel_runtime/refresh` | channel operate | 立即采集一次 |
@@ -197,7 +226,10 @@ UPDATE channel_runtime_limits SET peak_running = 0 WHERE channel_id = 1;
 - **每渠道趋势卡片**（调用并发数 / Prefill 性能 / Decode 性能）：
   - 「调用并发数」是组合图：Running 曲线到 0 轴之间的区域按利用率着色 —— 空闲（`<50%`）绿、
     正常（`≥50%`）蓝、繁忙（`≥80%`）黄、饱和（`≥100%`）红，与旧版拥挤度色标一致；
-    另叠加「最大 batch」与「请求数（Running + Waiting）」两条参考线。
+    另叠加「最大 batch」与「峰值在途请求」两条参考线。
+  - 「峰值在途请求」= 该时间桶内 `Running + Waiting` 的**最大值**（`max_requests`），是整数观测值。
+    早先用的是同一时间桶内的平均值（`avg_requests`），把多个瞬时采样平均后会出现
+    `7.83` 这类小数——那是在途请求数的**均值**，不是请求个数，看起来像"半个请求"。
   - 「Prefill 性能 / Decode 性能」各一条吞吐曲线，单位 tokens/s。
 
 ## 10. 部署注意

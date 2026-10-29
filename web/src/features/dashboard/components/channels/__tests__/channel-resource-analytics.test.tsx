@@ -112,6 +112,7 @@ beforeEach(() => {
           max_waiting: 3,
           max_batch: 8,
           avg_requests: 8,
+          max_requests: 9,
           prompt_throughput: 3275.9,
           generation_throughput: 716.7,
           sample_count: 6,

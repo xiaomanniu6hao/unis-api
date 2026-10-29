@@ -7398,6 +7398,7 @@
     "No model overrides configured. Click \"Add model\" to get started.": "No model overrides configured. Click \"Add model\" to get started.",
     "No notice": "No notice",
     "Override the default concurrency limit for specific models. Models not listed use the default.": "Override the default concurrency limit for specific models. Models not listed use the default.",
+    "Peak in-flight": "Peak in-flight",
     "Per-model concurrency overrides": "Per-model concurrency overrides",
     "Prompt Tokens": "Prompt Tokens",
     "Prompt Tokens Distribution": "Prompt Tokens Distribution",

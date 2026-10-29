@@ -157,6 +157,7 @@ type channelRuntimeSeriesItem struct {
 	MaxWaiting           int     `json:"max_waiting"`
 	MaxBatch             int     `json:"max_batch"`
 	AvgRequests          float64 `json:"avg_requests"`
+	MaxRequests          int     `json:"max_requests"`
 	PromptThroughput     float64 `json:"prompt_throughput"`
 	GenerationThroughput float64 `json:"generation_throughput"`
 	SampleCount          int     `json:"sample_count"`
@@ -203,6 +204,7 @@ func GetChannelRuntimeSeries(c *gin.Context) {
 			MaxWaiting:           point.MaxWaiting,
 			MaxBatch:             point.MaxBatch,
 			AvgRequests:          point.AvgRequests,
+			MaxRequests:          point.MaxRequests,
 			PromptThroughput:     point.PromptThroughput,
 			GenerationThroughput: point.GenerationThroughput,
 			SampleCount:          point.SampleCount,

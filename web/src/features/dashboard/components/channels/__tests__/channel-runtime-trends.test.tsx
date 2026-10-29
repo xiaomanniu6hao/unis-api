@@ -59,6 +59,7 @@ const seriesResponse = {
         max_waiting: 2,
         max_batch: 8,
         avg_requests: 7,
+        max_requests: 8,
         prompt_throughput: 3275.9,
         generation_throughput: 716.7,
         sample_count: 6,

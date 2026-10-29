@@ -43,6 +43,7 @@ function point(
     max_waiting: 0,
     max_batch: 8,
     avg_requests: 0,
+    max_requests: 0,
     prompt_throughput: 0,
     generation_throughput: 0,
     sample_count: 1,
@@ -76,13 +77,13 @@ describe('buildChannelConcurrencySpec', () => {
           bucket: 1789387200,
           avg_running: 7,
           max_batch: 8,
-          avg_requests: 9,
+          max_requests: 9,
         }),
         point({
           bucket: 1789387500,
           avg_running: 8,
           max_batch: 8,
-          avg_requests: 10,
+          max_requests: 10,
         }),
       ],
       300,
@@ -113,12 +114,12 @@ describe('buildChannelConcurrencySpec', () => {
     const secondBucket = tierValues.slice(4, 8)
     expect(secondBucket.map((item) => item.Value)).toEqual([0, 0, 0, 8])
 
-    // 四条线系列：最大 batch + 请求数
+    // 四条线系列：最大 batch + 在途请求峰值
     expect(data[1].values.map((item) => [item.Series, item.Value])).toEqual([
       ['Max batch', 8],
-      ['Requests', 9],
+      ['Peak in-flight', 9],
       ['Max batch', 8],
-      ['Requests', 10],
+      ['Peak in-flight', 10],
     ])
 
     // 颜色顺序必须与图例档位一致，饱和档为红色
@@ -129,7 +130,7 @@ describe('buildChannelConcurrencySpec', () => {
       'Busy',
       'Saturated',
       'Max batch',
-      'Requests',
+      'Peak in-flight',
     ])
     expect(color.range.slice(0, 4)).toEqual([
       '#10b981',

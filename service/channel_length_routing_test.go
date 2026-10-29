@@ -1,12 +1,79 @@
 package service
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/QuantumNous/new-api/setting/operation_setting"
+	"github.com/QuantumNous/new-api/tokenkit"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// 中文请求的真实 token 数必须按 BPE 计：Estimate 的字符权重会把 2400 token
+// 算成 4100，让 [0,4096) 的短请求误命中长上下文规则。
+func TestCountInputTokensUsesBPEProxyForUnknownFamily(t *testing.T) {
+	cjk := strings.Repeat("测试文本内容", 800) // 4800 汉字，vLLM 实测 2408 prompt tokens
+	body := []byte(fmt.Sprintf(
+		`{"model":"qwen3_8b","messages":[{"role":"user","content":"%s"}],"max_tokens":1}`,
+		cjk,
+	))
+
+	got := countInputTokens("qwen3_8b", body)
+	assert.InDelta(t, 2408, got, 120, "应贴近 vLLM 实测的 2408 token")
+	assert.Less(t, got, 4096, "2408 token 的请求不能跨过 4096 边界")
+
+	// 旧实现（Estimate）正是这个 bug 的来源，留在断言里防止回退
+	assert.GreaterOrEqual(t, tokenkit.Estimate("qwen3_8b", string(body)), 4096)
+}
+
+// 英文请求按 cl100k 计：o200k 会把 4507 token 的英文算成 4000，跌破 4096 边界。
+func TestCountInputTokensUsesCL100kForLatinText(t *testing.T) {
+	// 与联调脚本一致：22500 字符英文，vLLM 实测 4507 prompt tokens
+	en := strings.Repeat("hello world testing the quick brown fox jumps", 3000)[:22500]
+	assert.InDelta(t, 4507, countInputTokens("qwen3_8b", []byte(en)), 120)
+
+	body := []byte(fmt.Sprintf(
+		`{"model":"qwen3_8b","messages":[{"role":"user","content":"%s"}],"max_tokens":1}`,
+		strings.Repeat("hello world testing the quick brown fox jumps ", 300),
+	))
+	// 请求体小于精确计数上限，走不采样、不外推的路径
+	assert.Less(t, len(body), lengthRouteExactCountBytes)
+	assert.Equal(t, tokenkit.Count("gpt-4", string(body)), countInputTokens("qwen3_8b", body))
+}
+
+// OpenAI 家族仍按自己的 tiktoken 编码计数，不走代理编码。
+func TestCountInputTokensKeepsOpenAIEncoding(t *testing.T) {
+	body := []byte(fmt.Sprintf(
+		`{"model":"gpt-4o","messages":[{"role":"user","content":"%s"}],"max_tokens":1}`,
+		strings.Repeat("hello world testing ", 400),
+	))
+	assert.Equal(t, tokenkit.Count("gpt-4o", string(body)), countInputTokens("gpt-4o", body))
+}
+
+// 超过精确计数上限的请求体按前 16KB 采样后外推，误差要足够小。
+func TestCountInputTokensExtrapolatesLargeBody(t *testing.T) {
+	body := []byte(strings.Repeat(`测试文本内容，hello world. `, 3000)) // ≈ 240KB
+	exact := tokenkit.Count(lengthRouteCJKModel, string(body))
+	got := countInputTokens("qwen3_8b", body)
+
+	assert.Greater(t, len(body), lengthRouteExactCountBytes)
+	assert.InDelta(t, exact, got, float64(exact)*0.05, "采样外推误差应小于 5%%")
+}
+
+// 采样截断点落在多字节字符中间时不能把半个字符算成一个 token。
+func TestCountInputTokensHandlesSplitRuneAtSampleBoundary(t *testing.T) {
+	// 16KB 不是 3 的整数倍，这里必然切在某个汉字的中间
+	body := []byte(strings.Repeat("测", 20000))
+	assert.NotEqual(t, 0, lengthRouteExactCountBytes%3)
+
+	got := countInputTokens("qwen3_8b", body)
+	exact := tokenkit.Count(lengthRouteCJKModel, string(body))
+
+	assert.Greater(t, got, 0)
+	assert.InDelta(t, exact, got, float64(exact)*0.05)
+}
 
 func TestMatchLengthRoutePrefersMostSpecificRange(t *testing.T) {
 	setting := &operation_setting.ChannelRuntimeSetting{

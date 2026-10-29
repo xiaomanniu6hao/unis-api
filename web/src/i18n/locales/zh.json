@@ -7452,6 +7452,7 @@
     "Only channels listed here are collected. Channels left out are never scraped and keep the original scheduling behaviour.": "只有列在这里的渠道才会被采集；未列出的渠道不发起任何抓取，保持原有调度逻辑。",
     "Override by channel name. Priority: manual override > vLLM max_num_seqs > default max batch.": "按渠道名称覆盖。优先级：手工覆盖 > vLLM max_num_seqs > 默认最大 batch。",
     "Override the default concurrency limit for specific models. Models not listed use the default.": "为指定模型单独设置并发上限，未列出的模型使用默认值。",
+    "Peak in-flight": "峰值在途请求",
     "Per-model concurrency overrides": "按模型覆盖并发数",
     "Pick the allowed channel set from the request input length before channel selection.": "选渠道前根据请求输入长度确定允许调度的渠道集合。",
     "Prefix hit%": "前缀命中率%",

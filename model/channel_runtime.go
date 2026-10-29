@@ -513,6 +513,7 @@ type ChannelRuntimeSeriesPoint struct {
 	MaxWaiting           int     `json:"max_waiting"`
 	MaxBatch             int     `json:"max_batch"`
 	AvgRequests          float64 `json:"avg_requests"`
+	MaxRequests          int     `json:"max_requests"` // 桶内 Running+Waiting 峰值；AvgRequests 是均值，会出现小数
 	PromptThroughput     float64 `json:"prompt_throughput"`
 	GenerationThroughput float64 `json:"generation_throughput"`
 	SampleCount          int     `json:"sample_count"`
@@ -534,6 +535,7 @@ func GetChannelRuntimeSeries(channelId int, startTs int64, endTs int64, bucketSe
 			"AVG(COALESCE(waiting, 0)) AS avg_waiting, MAX(COALESCE(waiting, 0)) AS max_waiting, "+
 			"MAX(COALESCE(max_batch, 0)) AS max_batch, "+
 			"AVG(COALESCE(running, 0) + COALESCE(waiting, 0)) AS avg_requests, "+
+			"MAX(COALESCE(running, 0) + COALESCE(waiting, 0)) AS max_requests, "+
 			// 吞吐列升级前的样本为 NULL；用 COALESCE(AVG(...), 0) 让 NULL 不参与均值，
 			// 全部为 NULL 的桶再回退到 0。
 			"COALESCE(AVG(prompt_throughput), 0) AS prompt_throughput, "+

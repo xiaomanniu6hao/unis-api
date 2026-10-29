@@ -48,7 +48,9 @@ export interface ChannelRuntimeSeriesItem {
   avg_waiting: number
   max_waiting: number
   max_batch: number
+  // 桶内 Running + Waiting 的峰值（整数观测值）；avg_requests 是瞬时均值，会出现小数
   avg_requests: number
+  max_requests: number
   prompt_throughput: number
   generation_throughput: number
   sample_count: number
@@ -62,8 +64,7 @@ export interface ChannelRuntimeChannelItem {
   status: number
 }
 
-export interface ChannelRuntimeSeriesResponse
-  extends ChannelSeriesResponse<ChannelRuntimeSeriesItem> {
+export interface ChannelRuntimeSeriesResponse extends ChannelSeriesResponse<ChannelRuntimeSeriesItem> {
   channels: ChannelRuntimeChannelItem[]
 }
 

@@ -100,7 +100,7 @@ export function resolveConcurrencyTier(
 }
 
 // 调用并发数：Running 曲线到 0 轴之间的区域按拥挤度着色，
-// 叠加最大 batch 与请求数两条参考线。
+// 叠加最大 batch 与在途请求数（Running + Waiting 的桶内峰值）两条参考线。
 export function buildChannelConcurrencySpec(
   points: ChannelRuntimeSeriesItem[],
   bucketSeconds: number,
@@ -108,7 +108,9 @@ export function buildChannelConcurrencySpec(
 ): ChartSpec {
   const tierNames = CONCURRENCY_TIERS.map((item) => t(item.labelKey))
   const lineColors = ['#64748b', '#7c3aed']
-  const lineNames = [t('Max batch'), t('Requests')]
+  // 在途请求数取桶内峰值（整数观测值），不用均值：均值是把多个瞬时采样
+  // 平均出来的，会出现 7.83 这种小数，看着不像“请求数”。
+  const lineNames = [t('Max batch'), t('Peak in-flight')]
   const tierValues: TrendPoint[] = []
   const lineValues: TrendPoint[] = []
 
@@ -134,8 +136,8 @@ export function buildChannelConcurrencySpec(
     })
     lineValues.push({
       Time: time,
-      Series: t('Requests'),
-      Value: Number(point.avg_requests.toFixed(2)),
+      Series: t('Peak in-flight'),
+      Value: Math.round(point.max_requests),
     })
   })
 
