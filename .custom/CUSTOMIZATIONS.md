@@ -120,7 +120,7 @@
 - **新增**:
   - `setting/operation_setting/channel_runtime_setting.go` — 配置结构（默认关闭）
   - `model/channel_runtime.go` — 3 张表：`channel_runtime_samples`（时间序列）、`channel_runtime_limits`（渠道最大 batch）、`channel_runtime_state`（锁状态）
-  - `service/channel_runtime_monitor.go` — 每 5s 抓取渠道 base_url 同源 `/metrics`，落库 Running/Waiting/max_batch，并按阈值上锁/解锁
+  - `service/channel_runtime_monitor.go` — 默认每 1s 抓取渠道 base_url 同源 `/metrics`，落库 Running/Waiting/max_batch，并按阈值上锁/解锁
   - `service/channel_length_routing.go` — 按 prompt tokens 阈值把请求约束到指定渠道
   - `controller/channel_runtime.go` — 状态/样本/上限/刷新/解锁/资源统计/渠道清单 7 个 API
   - `web/src/features/dashboard/components/channels/` — 看板「渠道资源分析」（调用量 + 拥挤度）

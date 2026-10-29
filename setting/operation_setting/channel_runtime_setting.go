@@ -53,6 +53,8 @@ type ChannelRuntimeSetting struct {
 const (
 	// DefaultChannelMaxBatch 是新增渠道时预填的最大 batch。
 	DefaultChannelMaxBatch = 4
+	// DefaultScrapeIntervalSeconds 是默认采集间隔（秒）。
+	DefaultScrapeIntervalSeconds = 1
 	// DefaultScrapeTimeoutSeconds 是单次抓取 metrics 的默认超时（秒）。
 	DefaultScrapeTimeoutSeconds = 3
 	// MaxScrapeTimeoutSeconds 是抓取超时的上限（秒）。
@@ -63,7 +65,7 @@ const (
 
 var channelRuntimeSetting = ChannelRuntimeSetting{
 	Enabled:                  false,
-	ScrapeIntervalSeconds:    5,
+	ScrapeIntervalSeconds:    DefaultScrapeIntervalSeconds,
 	ScrapeTimeoutSeconds:     DefaultScrapeTimeoutSeconds,
 	SampleRetentionMonths:    DefaultSampleRetentionMonths,
 	DefaultMaxBatch:          DefaultChannelMaxBatch,
@@ -91,7 +93,7 @@ func NormalizeChannelRuntimeSetting(s *ChannelRuntimeSetting) {
 		return
 	}
 	if s.ScrapeIntervalSeconds < 1 {
-		s.ScrapeIntervalSeconds = 5
+		s.ScrapeIntervalSeconds = DefaultScrapeIntervalSeconds
 	}
 	if s.ScrapeIntervalSeconds > 300 {
 		s.ScrapeIntervalSeconds = 300

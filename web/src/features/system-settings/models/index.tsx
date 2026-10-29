@@ -65,7 +65,7 @@ const defaultModelSettings: ModelSettings = {
   DefaultUseAutoGroup: false,
   'group_ratio_setting.group_special_usable_group': '{}',
   'channel_runtime_setting.enabled': false,
-  'channel_runtime_setting.scrape_interval_seconds': 5,
+  'channel_runtime_setting.scrape_interval_seconds': 1,
   'channel_runtime_setting.scrape_timeout_seconds': 3,
   'channel_runtime_setting.sample_retention_months': 12,
   'channel_runtime_setting.default_max_batch': 4,

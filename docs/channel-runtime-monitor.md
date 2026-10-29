@@ -12,7 +12,7 @@
 
 ```
 渠道 base_url ──自动推导──► http://<host>/metrics
-                                   │ (每 N 秒, 默认 5s)
+                                   │ (每 N 秒, 默认 1s)
                                    ▼
                         采集器 service/channel_runtime_monitor.go
                                    │
@@ -42,7 +42,7 @@
 
 默认保留 **12 个月（1 年）**，采集循环每 10 分钟清理一次过期数据（`sample_retention_months` 可调，上限 12 个月）。
 
-> 数据量提醒：5s 间隔 × 单渠道 ≈ 1.7 万条/天、630 万条/年。渠道多或跑在 SQLite 上时，
+> 数据量提醒：1s 间隔 × 单渠道 ≈ 8.6 万条/天、3153 万条/年。渠道多或跑在 SQLite 上时，
 > 建议把 `sample_retention_months` 调小（例如 1 个月）。
 >
 > 若曾按旧版（主键为 `channel_id + model_name`）建过 `channel_runtime_limits`，先执行：
@@ -110,7 +110,7 @@ UPDATE channel_runtime_limits SET peak_running = 0 WHERE channel_id = 1;
 锁定条件（同时满足）：
 
 1. `Running >= max_batch`
-2. `Waiting > 0` 且连续 `saturation_waiting_samples`（默认 3 次 = 15s）**不下降**
+2. `Waiting > 0` 且连续 `saturation_waiting_samples`（默认 3 次 = 3s）**不下降**
 3. 该渠道所服务模型在同一分组内的候选渠道数 `> 1`
 
 解锁条件：
@@ -154,7 +154,7 @@ UPDATE channel_runtime_limits SET peak_running = 0 WHERE channel_id = 1;
 | 键 | 默认 | 说明 |
 | --- | --- | --- |
 | `enabled` | false | 采集总开关；关闭后清空内存态并解除所有锁，调度回到原有逻辑 |
-| `scrape_interval_seconds` | 5 | 采集间隔（1~300） |
+| `scrape_interval_seconds` | 1 | 采集间隔（1~300） |
 | `scrape_timeout_seconds` | 3 | 单次抓取超时（秒，1~30） |
 | `sample_retention_months` | 12 | 时序数据保留时长（月，上限 12） |
 | `default_max_batch` | 4 | 新增渠道行时预填的最大 batch |

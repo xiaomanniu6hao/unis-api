@@ -53,7 +53,7 @@ func TestNormalizeChannelRuntimeSettingDefaults(t *testing.T) {
 	setting := &operation_setting.ChannelRuntimeSetting{}
 	operation_setting.NormalizeChannelRuntimeSetting(setting)
 
-	assert.Equal(t, 5, setting.ScrapeIntervalSeconds)
+	assert.Equal(t, 1, setting.ScrapeIntervalSeconds)
 	// 采集超时按秒，默认 3 秒
 	assert.Equal(t, operation_setting.DefaultScrapeTimeoutSeconds, setting.ScrapeTimeoutSeconds)
 	assert.Equal(t, 3, setting.ScrapeTimeoutSeconds)

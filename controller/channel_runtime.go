@@ -46,7 +46,9 @@ func GetChannelRuntimeStatus(c *gin.Context) {
 		return states[i].ChannelId < states[j].ChannelId
 	})
 
-	staleThreshold := int64(setting.ScrapeIntervalSeconds * 3)
+	// 一次采集最长可能耗时 scrape_timeout，这段时间不能算作“过期”，
+	// 否则 1 秒间隔 + 3 秒超时会把正常采集误标成 stale。
+	staleThreshold := int64(setting.ScrapeIntervalSeconds*3 + setting.ScrapeTimeoutSeconds)
 	now := time.Now().Unix()
 	items := make([]channelRuntimeStatusItem, 0, len(states))
 	for _, state := range states {

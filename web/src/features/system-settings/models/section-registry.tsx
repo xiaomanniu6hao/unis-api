@@ -131,7 +131,7 @@ const MODELS_SECTIONS = [
           'channel_runtime_setting.enabled':
             settings['channel_runtime_setting.enabled'] ?? false,
           'channel_runtime_setting.scrape_interval_seconds':
-            settings['channel_runtime_setting.scrape_interval_seconds'] ?? 5,
+            settings['channel_runtime_setting.scrape_interval_seconds'] ?? 1,
           'channel_runtime_setting.scrape_timeout_seconds':
             settings['channel_runtime_setting.scrape_timeout_seconds'] ?? 3,
           'channel_runtime_setting.sample_retention_months':
@@ -152,13 +152,11 @@ const MODELS_SECTIONS = [
           'channel_runtime_setting.length_routing_enabled':
             settings['channel_runtime_setting.length_routing_enabled'] ?? false,
           'channel_runtime_setting.length_routing_fallback':
-            settings['channel_runtime_setting.length_routing_fallback'] ??
-            true,
-          'channel_runtime_setting.length_routing_rules':
-            formatJsonForEditor(
-              settings['channel_runtime_setting.length_routing_rules'] || '[]',
-              '[]'
-            ),
+            settings['channel_runtime_setting.length_routing_fallback'] ?? true,
+          'channel_runtime_setting.length_routing_rules': formatJsonForEditor(
+            settings['channel_runtime_setting.length_routing_rules'] || '[]',
+            '[]'
+          ),
         }}
       />
     ),
