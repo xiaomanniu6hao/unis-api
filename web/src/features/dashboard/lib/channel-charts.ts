@@ -153,7 +153,8 @@ export function buildChannelConcurrencySpec(
         yField: 'Value',
         seriesField: 'Series',
         stack: true,
-        area: { style: { fillOpacity: 0.35 } },
+        // 实心填充：图例色块与实际区域颜色必须一致，不能靠透明度减淡。
+        area: { style: { fillOpacity: 1 } },
         line: { style: { lineWidth: 0 } },
         point: { visible: false },
       },

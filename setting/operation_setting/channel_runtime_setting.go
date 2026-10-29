@@ -54,7 +54,7 @@ const (
 	// DefaultChannelMaxBatch 是新增渠道时预填的最大 batch。
 	DefaultChannelMaxBatch = 4
 	// DefaultScrapeIntervalSeconds 是默认采集间隔（秒）。
-	DefaultScrapeIntervalSeconds = 1
+	DefaultScrapeIntervalSeconds = 10
 	// DefaultScrapeTimeoutSeconds 是单次抓取 metrics 的默认超时（秒）。
 	DefaultScrapeTimeoutSeconds = 3
 	// MaxScrapeTimeoutSeconds 是抓取超时的上限（秒）。

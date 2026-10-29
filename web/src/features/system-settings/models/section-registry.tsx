@@ -131,7 +131,7 @@ const MODELS_SECTIONS = [
           'channel_runtime_setting.enabled':
             settings['channel_runtime_setting.enabled'] ?? false,
           'channel_runtime_setting.scrape_interval_seconds':
-            settings['channel_runtime_setting.scrape_interval_seconds'] ?? 1,
+            settings['channel_runtime_setting.scrape_interval_seconds'] ?? 10,
           'channel_runtime_setting.scrape_timeout_seconds':
             settings['channel_runtime_setting.scrape_timeout_seconds'] ?? 3,
           'channel_runtime_setting.sample_retention_months':
