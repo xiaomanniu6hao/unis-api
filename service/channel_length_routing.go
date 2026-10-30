@@ -1,6 +1,7 @@
 package service
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/QuantumNous/new-api/tokenkit"
 
 	"github.com/gin-gonic/gin"
+	"github.com/tidwall/gjson"
 )
 
 // lengthRouteMaxBodyBytes 是估算输入长度时读取请求体的上限。
@@ -25,15 +27,19 @@ const lengthRouteMaxBodyBytes = 8 << 20
 // 实测比 Qwen 分词高估约 1.7 倍（4800 汉字：Estimate 4080，真实 2408），
 // 于是 2400 token 的请求被算成 4100，跨过 4096 的边界跑到了长上下文渠道。
 //
-// 两个真实编码各擅长一半，按 CJK 字符占比二选一：
-//   - 中文：o200k 2400 vs cl100k 3200，真实 2408  → o200k 几乎精确
-//   - 英文：o200k 4000 vs cl100k 4499，真实 4507  → cl100k 几乎精确
+// 两个真实编码各擅长一半，按文字拆开各用各的：
+//   - 中文：o200k 最接近，但仍高估，再乘 lengthRouteCJKScale 校正
+//   - 英文/代码：cl100k 与 qwen 实测一致（误差 0.0%~0.1%）
 const (
 	lengthRouteCJKModel   = "gpt-4o" // o200k_base
 	lengthRouteLatinModel = "gpt-4"  // cl100k_base
-	// CJK 字符占比达到这个比例就按中文编码计数。纯中文/纯英文都能精确命中，
-	// 混合文本最坏偏差约 15%（选了反而更不贴的那个编码）。
-	lengthRouteCJKShareThreshold = 0.2
+	// lengthRouteCJKScale 把 o200k 的中文计数校正到 qwen 的量级。
+	// 用 vLLM /tokenize 对照 19 条语料实测：真实值与 o200k 的比值稳定在
+	// 0.77（日常对话）~0.88（说明文）、随机码位 0.82 上下；统一乘 0.82 后
+	// 中文误差收敛到 -4%~+9%，英文与代码本来就在 ±0.1%。
+	// GLM、DeepSeek 等厂商没有本地可用的词表，同样走这条代理路径，
+	// 拿到它们的 /tokenize 后可以用同一套语料重新校准这个系数。
+	lengthRouteCJKScale = 0.82
 )
 
 // lengthRouteExactCountBytes 是全文精确计数的上限。
@@ -112,61 +118,221 @@ func matchLengthRoute(
 }
 
 // isCJKEncodingRune 判断字符是否属于 CJK 文字（汉字、假名、谚文）：
-// 这些字符在两个候选编码下差异最大，用来决定选哪个编码计数。
+// 这些字符在两个候选编码下的计数量级差异最大，用来决定两种编码的权重。
 func isCJKEncodingRune(r rune) bool {
 	return unicode.Is(unicode.Han, r) || unicode.Is(unicode.Hiragana, r) ||
 		unicode.Is(unicode.Katakana, r) || unicode.Is(unicode.Hangul, r)
 }
 
-// countCJKShare 统计 CJK 字符占全部字符的比例，用于选择代理编码。
-func countCJKShare(text []byte) float64 {
-	total, cjk := 0, 0
-	for len(text) > 0 {
-		r, size := utf8.DecodeRune(text)
-		text = text[size:]
-		total++
-		if isCJKEncodingRune(r) {
-			cjk++
-		}
-	}
-	if total == 0 {
-		return 0
-	}
-	return float64(cjk) / float64(total)
+// lengthRouteScriptSampleBytes 是每类文字单独抽样计数的上限。
+// 两类文字各取这么多字节，既保证总量可控（最多 16KB），又够贴近真实分词比例。
+const lengthRouteScriptSampleBytes = 8 << 10
+
+// scriptSample 是一类文字（CJK 或非 CJK）的抽样：text 是抽到的字节，
+// size 是这类文字在全文中占的字节数（用来按比例外推）。
+type scriptSample struct {
+	text []byte
+	size int
 }
 
-// proxyEncodingModel 选择非 OpenAI 模型的计数编码：CJK 为主用 o200k，
-// 否则用 cl100k（贴近 Qwen 对英文的分词效率）。
-func proxyEncodingModel(modelName string, sample []byte) string {
-	if tokenkit.ModelFamily(modelName) == tokenkit.FamilyOpenAI {
-		return modelName
+// sampleByScript 把文本按文字分成 CJK 与非 CJK 两份，各自只保留同类字节，
+// 两类文字再各用最贴近的编码计数：
+//   - 中文/日文/韩文 → o200k（与 Qwen 同一量级，再乘 lengthRouteCJKScale）
+//   - 其余（英文、代码、标点）→ cl100k（英文实测一致）
+//
+// 不能整篇只挑一种编码：cl100k 数中文会高估 50%，o200k 数英文会略低；
+// 也不能按连续段落切分再各算各的：一个标点就会把后面整段中文归到英文编码下。
+func sampleByScript(text []byte) (cjk, latin scriptSample) {
+	cjk.text = make([]byte, 0, min(len(text), lengthRouteScriptSampleBytes))
+	latin.text = make([]byte, 0, min(len(text), lengthRouteScriptSampleBytes))
+
+	flush := func(start, end int, runIsCJK bool) {
+		n := end - start
+		sample := &latin
+		if runIsCJK {
+			sample = &cjk
+		}
+		sample.size += n
+		// 只取前 8KB 参与分词，剩下的按字节比例外推。
+		if room := lengthRouteScriptSampleBytes - len(sample.text); room > 0 {
+			if n > room {
+				n = room
+			}
+			sample.text = append(sample.text, text[start:start+n]...)
+		}
 	}
-	if countCJKShare(sample) >= lengthRouteCJKShareThreshold {
-		return lengthRouteCJKModel
+
+	start := 0
+	isCJK := false
+	first := true
+	for i := 0; i < len(text); {
+		r, size := utf8.DecodeRune(text[i:])
+		runeIsCJK := isCJKEncodingRune(r)
+		if !runeIsCJK && unicode.IsSpace(r) {
+			// 空白跟着前一段走：分词器是按「空格 + 词」编码的，
+			// 把「模型推理 」的空格留在这里，中文段才能按真实方式切分。
+			runeIsCJK = isCJK
+		}
+		if first {
+			isCJK, first = runeIsCJK, false
+		} else if runeIsCJK != isCJK {
+			flush(start, i, isCJK)
+			start, isCJK = i, runeIsCJK
+		}
+		i += size
 	}
-	return lengthRouteLatinModel
+	flush(start, len(text), isCJK)
+	// 截断点可能落在多字节字符中间，退回完整字符再分词。
+	cjk.text = trimRuneBoundary(cjk.text)
+	latin.text = trimRuneBoundary(latin.text)
+	return cjk, latin
+}
+
+// trimRuneBoundary 去掉末尾被截断的半个字符。
+func trimRuneBoundary(b []byte) []byte {
+	for len(b) > 0 {
+		if r, size := utf8.DecodeLastRune(b); r != utf8.RuneError || size > 1 {
+			break
+		}
+		b = b[:len(b)-1]
+	}
+	return b
 }
 
 // countInputTokens 估算 prompt token 数。
-// OpenAI 家族按自己的 tiktoken 编码精确计数；其他模型（qwen、glm 等）
-// 用与文本语种匹配的代理编码，比 Estimate 的字符权重启发式贴近真实分词。
+// 先按请求体的内容字段（prompt / messages / input）计数，识别不出来才退回整包估算。
+// 内容字段能拿到的两个收益：
+//   - prompt 直接给分词后的 token id 数组时，数组长度就是 prompt token 数，
+//     不用再把 2048 个 id 当数字文本 BPE 一遍（会被算成 4000~8000，短请求跑进长渠道）；
+//   - max_tokens、temperature、response_format 等非 prompt 字段不再计入。
 func countInputTokens(modelName string, body []byte) int {
-	if len(body) <= lengthRouteExactCountBytes {
-		return tokenkit.Count(proxyEncodingModel(modelName, body), string(body))
+	if tokens, ok := countContentTokens(modelName, body); ok {
+		return tokens
 	}
-	sample := body[:lengthRouteExactCountBytes]
-	// 截断点可能切在多字节字符中间，退到完整的 rune 边界再计数。
-	for len(sample) > 0 {
-		if r, size := utf8.DecodeLastRune(sample); r != utf8.RuneError || size > 1 {
-			break
+	return countTextTokens(modelName, body)
+}
+
+// countContentTokens 按 OpenAI 兼容协议的内容字段计数。
+// ok=false 表示请求体里没有可识别的 prompt/messages/input（例如透传的私有协议）。
+func countContentTokens(modelName string, body []byte) (int, bool) {
+	if prompt := gjson.GetBytes(body, "prompt"); prompt.Exists() {
+		if tokens, ok := countPromptValue(modelName, prompt); ok {
+			return tokens, true
 		}
-		sample = sample[:len(sample)-1]
 	}
+	if messages := gjson.GetBytes(body, "messages"); messages.IsArray() {
+		total := countMessageList(modelName, messages)
+		if tools := gjson.GetBytes(body, "tools"); tools.IsArray() {
+			// 工具定义的 JSON 也是模型实际看到的 prompt，按文本计一遍。
+			total += countTextTokens(modelName, []byte(tools.Raw))
+		}
+		return total, true
+	}
+	if input := gjson.GetBytes(body, "input"); input.Exists() {
+		if tokens, ok := countPromptValue(modelName, input); ok {
+			return tokens, true
+		}
+	}
+	return 0, false
+}
+
+// countPromptValue 处理 prompt / input 字段的三种形态：字符串、字符串数组、token id 数组。
+func countPromptValue(modelName string, value gjson.Result) (int, bool) {
+	if value.Type == gjson.String {
+		return countTextTokens(modelName, []byte(value.String())), true
+	}
+	if value.IsArray() {
+		return countPromptArray(modelName, value), true
+	}
+	return 0, false
+}
+
+func countPromptArray(modelName string, value gjson.Result) int {
+	total := 0
+	value.ForEach(func(_, item gjson.Result) bool {
+		switch {
+		case item.Type == gjson.Number:
+			// token id 数组：每个 id 就是一个 prompt token。
+			total++
+		case item.IsArray():
+			total += countPromptArray(modelName, item)
+		default:
+			total += countTextTokens(modelName, []byte(item.String()))
+		}
+		return true
+	})
+	return total
+}
+
+func countMessageList(modelName string, messages gjson.Result) int {
+	total := 0
+	messages.ForEach(func(_, message gjson.Result) bool {
+		// 角色标记与消息分隔符在 chat template 里约占 4 个 token。
+		total += 4
+		content := message.Get("content")
+		switch {
+		case content.Type == gjson.String:
+			total += countTextTokens(modelName, []byte(content.String()))
+		case content.IsArray():
+			content.ForEach(func(_, part gjson.Result) bool {
+				// 图片/音频等非文本部分不计入长度分流。
+				if text := part.Get("text"); text.Exists() {
+					total += countTextTokens(modelName, []byte(text.String()))
+				}
+				return true
+			})
+		}
+		if toolCalls := message.Get("tool_calls"); toolCalls.Exists() {
+			total += countTextTokens(modelName, []byte(toolCalls.Raw))
+		}
+		return true
+	})
+	return total
+}
+
+// countTextTokens 统计一段纯文本的 token 数。
+// OpenAI 家族按自己的 tiktoken 编码精确计数；其他模型（qwen、glm 等）
+// tokenkit 认不出它们的词表，按文字拆开各用最贴近的代理编码，比 Estimate
+// 的字符权重启发式贴近真实分词（实测中文 ±8%、英文与代码 ±0.1%）。
+func countTextTokens(modelName string, text []byte) int {
+	if len(text) == 0 {
+		return 0
+	}
+	if tokenkit.ModelFamily(modelName) == tokenkit.FamilyOpenAI {
+		return countSegmentTokens(modelName, text, 1)
+	}
+	cjk, latin := sampleByScript(text)
+	return countSampleTokens(lengthRouteCJKModel, cjk.text, cjk.size, lengthRouteCJKScale) +
+		countSampleTokens(lengthRouteLatinModel, latin.text, latin.size, 1)
+}
+
+// countSegmentTokens 用指定编码统计一段文本，再按 scale 校正到目标模型的量级。
+// 超过精确计数上限的文本取前 16KB 计数后按字节比例外推。
+func countSegmentTokens(encoding string, text []byte, scale float64) int {
+	if len(text) == 0 {
+		return 0
+	}
+	whole := len(text)
+	if whole > lengthRouteExactCountBytes {
+		whole = lengthRouteExactCountBytes
+	}
+	sample := trimRuneBoundary(text[:whole])
 	if len(sample) == 0 {
 		return lengthRouteExactCountBytes
 	}
-	sampled := tokenkit.Count(proxyEncodingModel(modelName, sample), string(sample))
-	return int(math.Round(float64(sampled) * float64(len(body)) / float64(len(sample))))
+	return countSampleTokens(encoding, sample, len(text), scale)
+}
+
+// countSampleTokens 用 sample 的 BPE 计数按字节比例外推到 totalBytes。
+func countSampleTokens(encoding string, sample []byte, totalBytes int, scale float64) int {
+	if len(sample) == 0 || totalBytes == 0 {
+		return 0
+	}
+	tokens := float64(tokenkit.Count(encoding, string(sample))) * scale
+	if len(sample) == totalBytes {
+		return int(math.Round(tokens))
+	}
+	return int(math.Round(tokens * float64(totalBytes) / float64(len(sample))))
 }
 
 // estimateRequestInputLength 估算请求输入的 prompt token 数（长度单位固定为 token）。
@@ -174,6 +340,7 @@ func countInputTokens(modelName string, body []byte) int {
 func estimateRequestInputLength(c *gin.Context, modelName string) (int, bool) {
 	storage, err := common.GetBodyStorage(c)
 	if err != nil {
+		common.SysLog(fmt.Sprintf("长度分流：读取请求体失败，跳过分流 (model=%s): %v", modelName, err))
 		return 0, false
 	}
 	body, err := storage.Bytes()

@@ -320,6 +320,13 @@ func IsChannelAllowedByRuntimeState(channelId int, constraint *ChannelSelectionC
 	if constraint == nil {
 		return true
 	}
+	if constraint.AllowedChannelIds != nil {
+		// FallbackToAll 只用于「集合内渠道全都不可用」时退回全量候选，
+		// 不能让集合外的渠道直接通过：否则会话粘性会把分流规则外的渠道一直钉住。
+		if _, ok := constraint.AllowedChannelIds[channelId]; !ok {
+			return false
+		}
+	}
 	return len(filterChannelIdsByRuntimeState([]int{channelId}, constraint)) > 0
 }
 
