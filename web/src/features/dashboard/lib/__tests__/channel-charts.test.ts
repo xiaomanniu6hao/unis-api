@@ -75,13 +75,16 @@ describe('buildChannelConcurrencySpec', () => {
       [
         point({
           bucket: 1789387200,
-          avg_running: 7,
+          // 均值是小数，绘图必须用桶内峰值（整数观测值）
+          avg_running: 6.83,
+          max_running: 7,
           max_batch: 8,
           max_requests: 9,
         }),
         point({
           bucket: 1789387500,
-          avg_running: 8,
+          avg_running: 7.5,
+          max_running: 8,
           max_batch: 8,
           max_requests: 10,
         }),

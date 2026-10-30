@@ -151,6 +151,8 @@
   - 计数只取内容字段（`prompt` / `messages` / `input` / `tools`），`prompt` 给 token id 数组时按数组长度；`\uXXXX` 转义先反转义；每类文字只对前 8KB 精确计数，其余按字节比例外推
   - 同一修复也把亲和性绕过补上：`IsChannelAllowedByRuntimeState` 先按 `AllowedChannelIds` 硬性排除集合外渠道，`FallbackToAll` 只在集合内渠道全不可用时生效
   - 「调用并发数」的参考线从 `avg_requests`（桶内均值，会出现 22.18 这种小数）改为 `max_requests`（桶内 Running+Waiting 峰值），图例更名为「峰值在途请求」；后端 `/series` 新增 `max_requests` 字段
+- **六次优化（并发数只取整数观测值）**:
+  - 「调用并发数」的曲线高度与颜色档位从 `avg_running`（一个桶内多个 10 秒采样的均值，如 7.83）改为 `max_running`（桶内 Running 峰值）。当前同时在跑的请求只能是整数，均值没有物理含义；`avg_running` 仅保留给渠道排序使用
 - **回滚**: 删新增文件 + 停用 `main.go` 中 `StartChannelRuntimeMonitor()` + 撤路由组与 AutoMigrate 注册
 
 ---

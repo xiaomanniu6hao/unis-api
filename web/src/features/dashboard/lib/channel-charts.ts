@@ -108,19 +108,17 @@ export function buildChannelConcurrencySpec(
 ): ChartSpec {
   const tierNames = CONCURRENCY_TIERS.map((item) => t(item.labelKey))
   const lineColors = ['#64748b', '#7c3aed']
-  // 在途请求数取桶内峰值（整数观测值），不用均值：均值是把多个瞬时采样
-  // 平均出来的，会出现 7.83 这种小数，看着不像“请求数”。
+  // Running 和 Running + Waiting 都取桶内峰值（整数观测值），不用均值：
+  // 均值是把多个瞬时采样平均出来的，会出现 7.83 这种小数，而「当前同时在跑
+  // 几个请求」只能是整数。
   const lineNames = [t('Max batch'), t('Peak in-flight')]
   const tierValues: TrendPoint[] = []
   const lineValues: TrendPoint[] = []
 
   points.forEach((point) => {
     const time = formatChannelBucket(bucketSeconds, point.bucket)
-    const running = Number(point.avg_running.toFixed(2))
-    const activeTier = resolveConcurrencyTier(
-      point.avg_running,
-      point.max_batch
-    )
+    const running = point.max_running
+    const activeTier = resolveConcurrencyTier(point.max_running, point.max_batch)
     // 同一时刻只有当前档位有值，堆叠后 0→Running 整块就是该档位的颜色。
     CONCURRENCY_TIERS.forEach((item) => {
       tierValues.push({
